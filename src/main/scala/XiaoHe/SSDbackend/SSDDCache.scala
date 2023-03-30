@@ -168,7 +168,7 @@ sealed class SSDCacheStage1(implicit val cacheConfig: SSDCacheConfig)
 
     val s1NotReady =
         (!io.metaReadBus.req.ready || !io.dataReadBus.req.ready) && io.in.valid
-    BoringUtils.addSource(s1NotReady, "s1NotReady")
+//    BoringUtils.addSource(s1NotReady, "s1NotReady")
 
     io.out.bits.req := io.in.bits
     io.out.valid := io.in.valid && io.metaReadBus.req.ready && io.dataReadBus.req.ready
@@ -211,7 +211,7 @@ sealed class SSDCacheStage2(implicit val cacheConfig: SSDCacheConfig)
     val miss = !(hitVec.orR) && io.in.valid
     val mmio = io.in.valid && io.in.bits.mmio
     val storeHit = WireInit(false.B)
-    BoringUtils.addSink(storeHit, "storeHit")
+//    BoringUtils.addSink(storeHit, "storeHit")
 
     //  val victimWaymask = if (Ways > 1) (1.U << LFSR64()(log2Up(Ways) - 1, 0)) else "b1".U
     val victimWaymask = 8.U // Set 3 as default
@@ -347,11 +347,11 @@ sealed class SSDCacheStage2(implicit val cacheConfig: SSDCacheConfig)
     val MMIOStorePkt = Wire(Flipped(Decoupled(new StoreBufferEntry)))
     MMIOStorePkt.valid := false.B
     MMIOStorePkt.bits := 0.U.asTypeOf(new StoreBufferEntry)
-    BoringUtils.addSink(mmioStorePending, "MMIOStorePending")
-    BoringUtils.addSink(outBufferValid, "MMIOStorePktValid")
-    BoringUtils.addSink(MMIOStorePkt.bits, "MMIOStorePktBits")
-    BoringUtils.addSource(MMIOStorePkt.ready, "MMIOStorePktReady")
-    BoringUtils.addSink(outBufferFire, "outBufferFire")
+//    BoringUtils.addSink(mmioStorePending, "MMIOStorePending")
+//    BoringUtils.addSink(outBufferValid, "MMIOStorePktValid")
+//    BoringUtils.addSink(MMIOStorePkt.bits, "MMIOStorePktBits")
+//    BoringUtils.addSource(MMIOStorePkt.ready, "MMIOStorePktReady")
+//    BoringUtils.addSink(outBufferFire, "outBufferFire")
     MMIOStorePkt.valid := outBufferValid && (state === s_mmioReq)
     val mmioStoreReq = Wire(
       Flipped(
@@ -515,15 +515,15 @@ sealed class SSDCacheStage2(implicit val cacheConfig: SSDCacheConfig)
     io.in.ready := io.out.ready && state === s_idle && !miss
 
     // stall when read req in s2 cant be responed or read req in s1 cant be send to s2( s1.in.ready === false.B)
-    val cacheStall = WireInit(false.B)
-    val s1NotReady = WireInit(false.B)
-    BoringUtils.addSource(cacheStall, "cacheStall")
-    BoringUtils.addSink(s1NotReady, "s1NotReady")
-    cacheStall := miss || state =/= s_idle || s1NotReady
-    BoringUtils.addSource(miss, "dcacheMissCycle")
-    BoringUtils.addSource((miss & (!RegNext(miss))), "dcacheMissCnt")
-    BoringUtils.addSource(s1NotReady & (!RegNext(s1NotReady)), "s1NotReadyCnt")
-    BoringUtils.addSource(cacheStall & (!RegNext(cacheStall)), "cacheStallCnt")
+//    val cacheStall = WireInit(false.B)
+//    val s1NotReady = WireInit(false.B)
+//    BoringUtils.addSource(cacheStall, "cacheStall")
+//    BoringUtils.addSink(s1NotReady, "s1NotReady")
+//    cacheStall := miss || state =/= s_idle || s1NotReady
+//    BoringUtils.addSource(miss, "dcacheMissCycle")
+//    BoringUtils.addSource((miss & (!RegNext(miss))), "dcacheMissCnt")
+//    BoringUtils.addSource(s1NotReady & (!RegNext(s1NotReady)), "s1NotReadyCnt")
+//    BoringUtils.addSource(cacheStall & (!RegNext(cacheStall)), "cacheStallCnt")
 
 }
 
@@ -649,7 +649,7 @@ class flushDCache(implicit val cacheConfig: SSDCacheConfig)
             offset_state := offset_idle
         }
     }
-    BoringUtils.addSource(way_state === way_done, "DCache_done")
+//    BoringUtils.addSource(way_state === way_done, "DCache_done")
     def MemValid(pc: UInt) = LookupTree(
       wayCnt.value(1, 0),
       List(
@@ -779,4 +779,68 @@ object SSDCache {
         mmio <> cache.io.mmio
         cache.io.out
     }
+}
+
+class SSDCacheTest(implicit val cacheConfig: SSDCacheConfig)
+  extends CacheModule
+    with HasSSDCacheIO {
+    // cache pipeline
+
+    val s1 = Module(new SSDCacheStage1)
+    val s2 = Module(new SSDCacheStage2)
+    val metaArray = Module(
+        new MetaSRAMTemplateWithArbiter(
+            nRead = 2,
+            nWrite = 2,
+            new MetaBundle,
+            set = Sets,
+            way = Ways,
+            shouldReset = true
+        )
+    )
+    val dataArray = Module(
+        new ysyxSRAMTemplateWithArbiter(
+            nRead = 3,
+            new DataBundle,
+            set = Sets * LineBeats,
+            way = Ways
+        )
+    )
+    val flushDCache = Module(new flushDCache)
+    metaArray.io.r(1) <> flushDCache.io.metaReadBus
+    dataArray.io.r(2) <> flushDCache.io.dataReadBus
+    metaArray.io.w(1) <> flushDCache.io.metaWriteBus
+
+    val Xbar = Module(new SimpleBusCrossbarNto1(2))
+    Xbar.io.in(0) <> flushDCache.io.mem
+    Xbar.io.in(1) <> s2.io.mem
+
+    s1.io.in <> io.in.req
+
+    PipelineConnect(s1.io.out, s2.io.in, s2.io.out.fire(), io.flush)
+
+    io.in.resp <> s2.io.out
+    s2.io.flush := io.flush
+    io.out.mem <> Xbar.io.out
+    io.out.coh := DontCare
+    io.mmio <> s2.io.mmio
+
+    metaArray.io.r(0) <> s1.io.metaReadBus
+    dataArray.io.r(0) <> s1.io.dataReadBus
+    dataArray.io.r(1) <> s2.io.dataReadBus
+
+    metaArray.io.w(0) <> s2.io.metaWriteBus
+    dataArray.io.w <> s2.io.dataWriteBus
+
+    s2.io.metaReadResp := s1.io.metaReadBus.resp.data
+    s2.io.dataReadResp := s1.io.dataReadBus.resp.data
+
+    val sdtag =
+        (s2.io.mem.req.valid && (s2.io.mem.req.bits.addr === "hfc011718".U))
+    dontTouch(sdtag)
+
+    // test tmp
+    val dataIndexTag =
+        dataArray.io.w.req.valid && dataArray.io.w.req.bits.setIdx === "h16e".U
+
 }
