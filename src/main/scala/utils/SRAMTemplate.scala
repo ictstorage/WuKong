@@ -315,6 +315,9 @@ class ysyxSRAMTemplate[T <: Data](gen: T, set: Int, way: Int = 1,
 //    }
 //  }
 }
+
+
+
 class SRAMTemplateWithArbiter[T <: Data](nRead: Int, gen: T, set: Int, way: Int = 1,
                                          shouldReset: Boolean = false) extends Module {
   val io = IO(new Bundle {

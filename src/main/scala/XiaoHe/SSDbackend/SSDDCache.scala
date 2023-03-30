@@ -35,7 +35,8 @@ case class SSDCacheConfig(
     userBits: Int = 0,
     idBits: Int = 0,
     totalSize: Int = 16, // Kbytes
-    ways: Int = 4
+    ways: Int = 4,
+    DCacheBanks: Int = 8
 )
 
 sealed trait HasCacheConst {
@@ -56,6 +57,16 @@ sealed trait HasCacheConst {
     val IndexBits = log2Up(Sets)
     val WordIndexBits = log2Up(LineBeats)
     val TagBits = PAddrBits - OffsetBits - IndexBits
+    val DCacheWays = cacheConfig.ways
+    val DCacheBanks = cacheConfig.DCacheBanks
+    val LoadPipelineWidth = 2
+    val DCacheSRAMRowBits = XLEN
+    val DCacheSets = TotalSize * 1024 / LineSize / Ways
+    val nWays = cacheConfig.ways
+    val DCacheSetOffset = log2Up(LineSize) + log2Up(cacheConfig.DCacheBanks)
+    val DCacheBankOffset = log2Up(XLEN)
+    val DCacheAboveIndexOffset = DCacheSetOffset + log2Up(DCacheSets)
+    val DCacheSRAMRowBytes = DCacheSRAMRowBits/8
 
     def addrBundle = new Bundle {
         val tag = UInt(TagBits.W)
@@ -84,11 +95,11 @@ sealed trait HasCacheConst {
         (a1.asTypeOf(addrBundle).index === a2.asTypeOf(addrBundle).index)
 }
 
-sealed abstract class CacheBundle(implicit cacheConfig: SSDCacheConfig)
+abstract class CacheBundle(implicit cacheConfig: SSDCacheConfig)
     extends Bundle
     with HasNutCoreParameter
     with HasCacheConst
-sealed abstract class CacheModule(implicit cacheConfig: SSDCacheConfig)
+abstract class CacheModule(implicit cacheConfig: SSDCacheConfig)
     extends Module
     with HasNutCoreParameter
     with HasCacheConst

@@ -26,6 +26,7 @@ import chisel3._
 import chisel3.stage._
 import top.XiaoHeSim.args
 import top.ysyx.args
+import utils.BankedDataArray
 class riscv_cpu_io extends Bundle {
   val master = new ysyxAXI4IO()
   val slave  = Flipped(new ysyxAXI4IO())
@@ -161,7 +162,7 @@ object XiaoHeSim extends App{
 object CacheSim extends App{
   lazy val config = NutCoreConfig(FPGAPlatform = false)
   (new chisel3.stage.ChiselStage).execute(args, Seq(
-    chisel3.stage.ChiselGeneratorAnnotation(() =>new SSDCacheTest()(SSDCacheConfig(ro = true)))
+    chisel3.stage.ChiselGeneratorAnnotation(() =>new BankedDataArray()(SSDCacheConfig(ro = true)))
   ))
 }
 
