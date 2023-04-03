@@ -92,7 +92,38 @@ class BankedSRAMWriteBus[T <: Data](private val gen: T, val set: Int, val way: I
   }
 }
 
-class BankedSRAMTemplate[T <: Data](gen: T, set: Int, way: Int = 1,
+
+
+class L1BankedDataReadReq(implicit val cacheConfig: SSDCacheConfig) extends CacheBundle {
+  val way_en = Bits(DCacheWays.W)
+  val addr = Bits(PAddrBits.W)
+}
+
+class L1BankedDataReadLineReq(implicit val p: SSDCacheConfig) extends L1BankedDataReadReq {
+  val rmask = Bits(DCacheBanks.W)
+}
+
+// Now, we can write a cache-block in a single cycle
+class L1BankedDataWriteReq(implicit val p: SSDCacheConfig) extends L1BankedDataReadReq {
+  val wmask = Bits(DCacheBanks.W)
+  val data = Vec(DCacheBanks, Bits(LineSize.W))
+}
+
+class L1BankedDataReadResult(implicit val cacheConfig: SSDCacheConfig) extends CacheBundle {
+  // you can choose which bank to read to save power
+  val raw_data = Bits(LineSize.W)
+//  val error = Bool() // slow to generate, use it with care
+}
+
+//                     Banked DCache Data
+// -----------------------------------------------------------------
+// | Bank0 | Bank1 | Bank2 | Bank3 | Bank4 | Bank5 | Bank6 | Bank7 |
+// -----------------------------------------------------------------
+// | Way0  | Way0  | Way0  | Way0  | Way0  | Way0  | Way0  | Way0  |
+// | Way1  | Way1  | Way1  | Way1  | Way1  | Way1  | Way1  | Way1  |
+// | ....  | ....  | ....  | ....  | ....  | ....  | ....  | ....  |
+// -----------------------------------------------------------------
+class SRAMTemplate[T <: Data](gen: T, set: Int, way: Int = 1,
                               shouldReset: Boolean = false, holdRead: Boolean = false, singlePort: Boolean = false, bypassWrite: Boolean = false) extends Module {
   val io = IO(new Bundle {
     val r = Flipped(new BankedSRAMReadBus(gen, set, way))
@@ -152,35 +183,6 @@ class BankedSRAMTemplate[T <: Data](gen: T, set: Int, way: Int = 1,
 
 }
 
-class L1BankedDataReadReq(implicit val cacheConfig: SSDCacheConfig) extends CacheBundle {
-  val way_en = Bits(DCacheWays.W)
-  val addr = Bits(PAddrBits.W)
-}
-
-class L1BankedDataReadLineReq(implicit val p: SSDCacheConfig) extends L1BankedDataReadReq {
-  val rmask = Bits(DCacheBanks.W)
-}
-
-// Now, we can write a cache-block in a single cycle
-class L1BankedDataWriteReq(implicit val p: SSDCacheConfig) extends L1BankedDataReadReq {
-  val wmask = Bits(DCacheBanks.W)
-  val data = Vec(DCacheBanks, Bits(LineSize.W))
-}
-
-class L1BankedDataReadResult(implicit val cacheConfig: SSDCacheConfig) extends CacheBundle {
-  // you can choose which bank to read to save power
-  val raw_data = Bits(LineSize.W)
-//  val error = Bool() // slow to generate, use it with care
-}
-
-//                     Banked DCache Data
-// -----------------------------------------------------------------
-// | Bank0 | Bank1 | Bank2 | Bank3 | Bank4 | Bank5 | Bank6 | Bank7 |
-// -----------------------------------------------------------------
-// | Way0  | Way0  | Way0  | Way0  | Way0  | Way0  | Way0  | Way0  |
-// | Way1  | Way1  | Way1  | Way1  | Way1  | Way1  | Way1  | Way1  |
-// | ....  | ....  | ....  | ....  | ....  | ....  | ....  | ....  |
-// -----------------------------------------------------------------
 abstract class AbstractBankedDataArray(implicit val cacheConfig: SSDCacheConfig) extends CacheModule {
   val ReadlinePortErrorIndex = LoadPipelineWidth
   val io = IO(new Bundle {
