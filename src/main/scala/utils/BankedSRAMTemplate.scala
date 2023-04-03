@@ -123,7 +123,7 @@ class L1BankedDataReadResult(implicit val cacheConfig: SSDCacheConfig) extends C
 // | Way1  | Way1  | Way1  | Way1  | Way1  | Way1  | Way1  | Way1  |
 // | ....  | ....  | ....  | ....  | ....  | ....  | ....  | ....  |
 // -----------------------------------------------------------------
-class SRAMTemplate[T <: Data](gen: T, set: Int, way: Int = 1,
+class BankedSRAMTemplate[T <: Data](gen: T, set: Int, way: Int = 1,
                               shouldReset: Boolean = false, holdRead: Boolean = false, singlePort: Boolean = false, bypassWrite: Boolean = false) extends Module {
   val io = IO(new Bundle {
     val r = Flipped(new BankedSRAMReadBus(gen, set, way))
@@ -266,7 +266,7 @@ class BankedDataArray(implicit val p: SSDCacheConfig) extends AbstractBankedData
 
     // multiway data bank
     val data_bank = Array.fill(DCacheWays) {
-      Module(new SRAMTemplate(
+      Module(new BankedSRAMTemplate(
         Bits(DCacheSRAMRowBits.W),
         set = DCacheSets,
         way = 1,
