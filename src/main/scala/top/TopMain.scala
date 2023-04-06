@@ -19,7 +19,7 @@ package top
 import XiaoHe.NutCoreConfig
 import bus.axi4.ysyxAXI4IO
 import system.XiaoHe
-import _root_.XiaoHe.SSDbackend.{SSDCache, SSDCacheConfig, SSDCacheTest}
+import _root_.XiaoHe.SSDbackend.{BankedCacheConfig, BankedCacheStage1, BankedCacheStage2, SSDCache, SSDCacheConfig, SSDCacheTest}
 import device.AXI4VGA
 import sim.SimTop
 import chisel3._
@@ -162,7 +162,7 @@ object XiaoHeSim extends App{
 object CacheSim extends App{
   lazy val config = NutCoreConfig(FPGAPlatform = false)
   (new chisel3.stage.ChiselStage).execute(args, Seq(
-    chisel3.stage.ChiselGeneratorAnnotation(() =>new BankedDataArray()(SSDCacheConfig(ro = true)))
+    chisel3.stage.ChiselGeneratorAnnotation(() =>new BankedCacheStage1()(BankedCacheConfig(ro = true)))
   ))
 }
 

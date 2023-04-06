@@ -68,8 +68,8 @@ class BankedSRAMBundleR[T <: Data](private val gen: T, val way: Int = 1) extends
 }
 
 class BankedSRAMReadBus[T <: Data](private val gen: T, val set: Int, val way: Int = 1) extends Bundle {
-  val req = Decoupled(new SRAMBundleA(set))
-  val resp = Flipped(new SRAMBundleR(gen, way))
+  val req = Decoupled(new BankedSRAMBundleA(set))
+  val resp = Flipped(new BankedSRAMBundleR(gen, way))
 
   def apply(valid: Bool, setIdx: UInt) = {
     this.req.bits.apply(setIdx)

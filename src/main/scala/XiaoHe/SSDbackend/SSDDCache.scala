@@ -138,10 +138,21 @@ class SSDCacheIO(implicit val cacheConfig: SSDCacheConfig)
     val out = new SimpleBusC
     val mmio = new SimpleBusUC
 }
+//class BankedCacheIO(implicit val cacheConfig: SSDCacheConfig)
+//  extends Bundle
+//    with HasNutCoreParameter
+//    with HasCacheConst {
+//    val in = Flipped(Vec(2, new SimpleBusUC(userBits = userBits, idBits = idBits)))
+//    val flush = Input(Bool())
+//    val out = Vec(2, new SimpleBusC)
+//    val mmio = new SimpleBusUC
+//}
 trait HasSSDCacheIO {
     implicit val cacheConfig: SSDCacheConfig
     val io = IO(new SSDCacheIO)
 }
+
+
 
 sealed class SSDStage1IO(implicit val cacheConfig: SSDCacheConfig)
     extends CacheBundle {
