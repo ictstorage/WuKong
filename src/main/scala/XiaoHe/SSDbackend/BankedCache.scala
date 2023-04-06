@@ -17,7 +17,7 @@ package XiaoHe.SSDbackend
 
 
 import chisel3._
-import chisel3.util._
+import chisel3.util.{Enum, _}
 import chisel3.util.experimental.BoringUtils
 import bus.simplebus._
 import bus.axi4._
@@ -235,81 +235,78 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
 
   val io = IO(new BankedCacheStage1IO)
 
-  val metaWriteArb = Module(new Arbiter(CacheMetaArrayWriteBus().req.bits, 2))
-  val dataWriteArb = Module(new Arbiter(CacheDataArrayWriteBus().req.bits, 2))
+  val metaWriteArb = Module(new Arbiter(CacheMetaArrayWriteBus().req.bits, 3))
+  val dataWriteArb = Module(new Arbiter(CacheDataArrayWriteBus().req.bits, 3))
 
-
-
-  val metaWay = io.metaReadResp
-  val req0 = io.in(0).bits.req
-  val addr0 = req0.addr.asTypeOf(addrBundle)
-  val hitVec0 = VecInit(
-    metaWay.map(m => m.valid && (m.tag === addr0.tag))
-  ).asUInt
-  val hit = hitVec.orR && io.in.valid
-  val miss = !(hitVec.orR) && io.in.valid
-  val mmio = io.in.valid && io.in.bits.mmio
-  val storeHit = WireInit(false.B)
-  //    BoringUtils.addSink(storeHit, "storeHit")
-
-  //  val victimWaymask = if (Ways > 1) (1.U << LFSR64()(log2Up(Ways) - 1, 0)) else "b1".U
-  val victimWaymask = 8.U // Set 3 as default
-  val invalidVec = VecInit(metaWay.map(m => !m.valid)).asUInt
-  val hasInvalidWay = invalidVec.orR
-  val refillInvalidWaymask = Mux(
-    invalidVec >= 8.U,
-    "b1000".U,
-    Mux(
-      invalidVec >= 4.U,
-      "b0100".U,
-      Mux(invalidVec >= 2.U, "b0010".U, "b0001".U)
+  for(i <- 0 until 2){
+    val metaWay = io.metaReadResp(i)
+    val req = io.in(i).bits.req
+    val addr = req.addr.asTypeOf(addrBundle)
+    val hitVec = VecInit(
+      metaWay.map(m => m.valid && (m.tag === addr.tag))
+    ).asUInt
+    val hit = hitVec.orR && io.in(i).valid
+    val miss = !(hitVec.orR) && io.in(i).valid
+    val mmio = io.in(i).valid && io.in(i).bits.mmio
+    val victimWaymask = 8.U // Set 3 as default
+    val invalidVec = VecInit(metaWay.map(m => !m.valid)).asUInt
+    val hasInvalidWay = invalidVec.orR
+    val refillInvalidWaymask = Mux(
+      invalidVec >= 8.U,
+      "b1000".U,
+      Mux(
+        invalidVec >= 4.U,
+        "b0100".U,
+        Mux(invalidVec >= 2.U, "b0010".U, "b0001".U)
+      )
     )
-  )
 
-  val hitReadBurst = hit && req.isReadBurst()
+    val hitReadBurst = hit && req.isReadBurst()
 
-  val waymask = Mux(
-    hit,
-    hitVec,
-    Mux(hasInvalidWay, refillInvalidWaymask, victimWaymask.asUInt)
-  )
-  val meta = Mux1H(waymask, metaWay)
+    val waymask = Mux(
+      hit,
+      hitVec,
+      Mux(hasInvalidWay, refillInvalidWaymask, victimWaymask.asUInt)
+    )
+    val meta = Mux1H(waymask, metaWay)
 
-  assert(!(mmio && hit), "MMIO request should not hit in cache")
+    assert(!(mmio && hit), "MMIO request should not hit in cache")
+    val dataRead = Mux1H(waymask, io.dataReadResp(i)).data
+    //  dontTouch(dataRead)
+    val wordMask = Mux(req.isWrite(), MaskExpand(req.wmask), 0.U(DataBits.W))
 
-  val dataRead = Mux1H(waymask, io.dataReadResp).data
-  //  dontTouch(dataRead)
-  val wordMask = Mux(req.isWrite(), MaskExpand(req.wmask), 0.U(DataBits.W))
+    val hitWrite = hit && req.isWrite()
 
-  val hitWrite = hit && req.isWrite()
+    val dataHitWriteBus = Wire(CacheDataArrayWriteBus()).apply(
+      data =
+        Wire(new BankedDataBundle).apply(MaskData(dataRead, req.wdata, wordMask)),
+      valid = hitWrite,
+      setIdx = Cat(addr.index, addr.bankIndex),
+      waymask = waymask
+    )
 
-  val dataHitWriteBus = Wire(CacheDataArrayWriteBus()).apply(
-    data =
-      Wire(new BankedDataBundle).apply(MaskData(dataRead, req.wdata, wordMask)),
-    valid = hitWrite,
-    setIdx = Cat(addr.index, addr.bankIndex),
-    waymask = waymask
-  )
+    val metaHitWriteBus = Wire(CacheMetaArrayWriteBus()).apply(
+      valid = hitWrite && !meta.dirty,
+      setIdx = getMetaIdx(req.addr),
+      waymask = waymask,
+      data = Wire(new BankedMetaBundle)
+        .apply(tag = meta.tag, valid = true.B, dirty = true.B)
+    )
+    io.dataReadBus(i).apply(
+      valid = state === s_memWriteReq && state2 === s2_idle,
+      setIdx = Cat(addr.index, writeBeatCnt.value)
+    )
 
-  val metaHitWriteBus = Wire(CacheMetaArrayWriteBus()).apply(
-    valid = hitWrite && !meta.dirty,
-    setIdx = getMetaIdx(req.addr),
-    waymask = waymask,
-    data = Wire(new BankedMetaBundle)
-      .apply(tag = meta.tag, valid = true.B, dirty = true.B)
-  )
+
+  }
 
   val s_idle :: s_memReadReq :: s_memReadResp :: s_memWriteReq :: s_memWriteResp :: s_mmio_wait :: s_mmioReq :: s_mmioResp :: s_wait_resp :: s_release :: Nil =
     Enum(10)
   val state = RegInit(s_idle)
-  val needFlush = RegInit(false.B)
+  val storeHit = WireInit(false.B)
+  //    BoringUtils.addSink(storeHit, "storeHit")
 
-  when(io.flush && (state =/= s_idle) && !io.out.valid) {
-    needFlush := true.B
-  }
-  when(state === s_wait_resp && needFlush) {
-    needFlush := false.B
-  }
+
 
   val readBeatCnt = Counter(LineBeats)
   val writeBeatCnt = Counter(LineBeats)
@@ -317,10 +314,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   val s2_idle :: s2_dataReadWait :: s2_dataOK :: Nil = Enum(3)
   val state2 = RegInit(s2_idle)
 
-  io.dataReadBus.apply(
-    valid = state === s_memWriteReq && state2 === s2_idle,
-    setIdx = Cat(addr.index, writeBeatCnt.value)
-  )
+
   val dataWay =
     RegEnable(io.dataReadBus.resp.data, state2 === s2_dataReadWait)
   val dataHitWay = Mux1H(waymask, dataWay).data
@@ -484,7 +478,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
       }
     }
     is(s_wait_resp) {
-      when(io.out.fire() || needFlush) {
+      when(io.out.fire() ) {
         state := s_idle
       }
     }
@@ -529,7 +523,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   io.out.bits.id.zip(req.id).map { case (o, i) => o := i }
 
   // out is valid when cacheline is refilled
-  io.out.valid := io.in.valid && !needFlush && Mux(
+  io.out.valid := io.in.valid && Mux(
     hit || storeHit,
     true.B,
     state === s_wait_resp
