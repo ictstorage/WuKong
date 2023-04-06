@@ -125,6 +125,20 @@ sealed class BankedMetaBundle(implicit val cacheConfig: BankedCacheConfig)
   }
 }
 
+class BankMetaBundle_tmp   (implicit val cacheConfig: BankedCacheConfig) extends BankedCacheBundle
+  with BankedHasCacheConst {
+  val tag = UInt(TagBits.W)
+  val valid = (Bool())
+  val dirty = (Bool())
+
+  def apply(tag: UInt, valid: Bool, dirty: Bool) = {
+    this.tag := tag
+    this.valid := valid
+    this.dirty := dirty
+    this
+  }
+}
+
 sealed class BankedDataBundle(implicit val cacheConfig: BankedCacheConfig)
   extends BankedCacheBundle {
   val data = Output(UInt(DataBits.W))
@@ -238,67 +252,83 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   val metaWriteArb = Module(new Arbiter(CacheMetaArrayWriteBus().req.bits, 3))
   val dataWriteArb = Module(new Arbiter(CacheDataArrayWriteBus().req.bits, 3))
 
+  val victimWaymask = 8.U // Set 3 as default
+  val metaWay = Wire(Vec(2, Vec(Ways, new BankMetaBundle_tmp)))
+  val req     = Wire(Vec(2, new SimpleBusReqBundle(userBits = userBits, idBits = idBits)))
+  val addr    = Wire(Vec(2, addrBundle))
+  val hitVec  = Wire(Vec(2, UInt(4.W)))
+  val hit     = Wire(Vec(2, Bool()))
+  val miss    = Wire(Vec(2, Bool()))
+
+  val mmio          = Wire(Vec(2, Bool()))
+  val invalidVec    = Wire(Vec(2, UInt(4.W)))
+  val hasInvalidWay = Wire(Vec(2, Bool()))
+
+  val refillInvalidWaymask = Wire(Vec(2, UInt(4.W)))
+
+  val hitReadBurst = Wire(Vec(2, Bool()))
+  val waymask = Wire(Vec(2, UInt(4.W)))
+
+  val meta = Wire(Vec(2, new BankedMetaBundle))
+  val dataRead = Wire(Vec(2, UInt(64.W)))
+  val wordMask = Wire(Vec(2, UInt(64.W)))
   for(i <- 0 until 2){
-    val metaWay = io.metaReadResp(i)
-    val req = io.in(i).bits.req
-    val addr = req.addr.asTypeOf(addrBundle)
-    val hitVec = VecInit(
-      metaWay.map(m => m.valid && (m.tag === addr.tag))
+    metaWay(i) := io.metaReadResp(i)
+    req(i)     := io.in(i).bits.req
+    addr(i)    := req(i).addr.asTypeOf(addrBundle)
+    hitVec(i)  := VecInit(
+      metaWay(i).map(m => m.valid && (m.tag === addr(i).tag))
     ).asUInt
-    val hit = hitVec.orR && io.in(i).valid
-    val miss = !(hitVec.orR) && io.in(i).valid
-    val mmio = io.in(i).valid && io.in(i).bits.mmio
-    val victimWaymask = 8.U // Set 3 as default
-    val invalidVec = VecInit(metaWay.map(m => !m.valid)).asUInt
-    val hasInvalidWay = invalidVec.orR
-    val refillInvalidWaymask = Mux(
-      invalidVec >= 8.U,
+    hit(i)     := hitVec(i).orR && io.in(i).valid
+    miss(i)    := !(hitVec(i).orR) && io.in(i).valid
+    mmio(i)    := io.in(i).valid && io.in(i).bits.mmio
+
+    invalidVec(i) := VecInit(metaWay(i).map(m => !m.valid)).asUInt
+    hasInvalidWay(i) := invalidVec(i).orR
+    refillInvalidWaymask(i) := Mux(
+      invalidVec(i) >= 8.U,
       "b1000".U,
       Mux(
-        invalidVec >= 4.U,
+        invalidVec(i) >= 4.U,
         "b0100".U,
-        Mux(invalidVec >= 2.U, "b0010".U, "b0001".U)
+        Mux(invalidVec(i) >= 2.U, "b0010".U, "b0001".U)
       )
     )
 
-    val hitReadBurst = hit && req.isReadBurst()
+    hitReadBurst(i) := hit(i) && req(i).isReadBurst()
 
-    val waymask = Mux(
-      hit,
-      hitVec,
-      Mux(hasInvalidWay, refillInvalidWaymask, victimWaymask.asUInt)
+    waymask(i) := Mux(
+      hit(i),
+      hitVec(i),
+      Mux(hasInvalidWay(i), refillInvalidWaymask(i), victimWaymask.asUInt)
     )
-    val meta = Mux1H(waymask, metaWay)
+    meta(i) := Mux1H(waymask(i), metaWay(i))
 
-    assert(!(mmio && hit), "MMIO request should not hit in cache")
-    val dataRead = Mux1H(waymask, io.dataReadResp(i)).data
+//    assert(!(mmio && hit), "MMIO request should not hit in cache")
+    dataRead(i) := Mux1H(waymask(i), io.dataReadResp(i)).data
     //  dontTouch(dataRead)
-    val wordMask = Mux(req.isWrite(), MaskExpand(req.wmask), 0.U(DataBits.W))
-
-    val hitWrite = hit && req.isWrite()
-
-    val dataHitWriteBus = Wire(CacheDataArrayWriteBus()).apply(
-      data =
-        Wire(new BankedDataBundle).apply(MaskData(dataRead, req.wdata, wordMask)),
-      valid = hitWrite,
-      setIdx = Cat(addr.index, addr.bankIndex),
-      waymask = waymask
-    )
-
-    val metaHitWriteBus = Wire(CacheMetaArrayWriteBus()).apply(
-      valid = hitWrite && !meta.dirty,
-      setIdx = getMetaIdx(req.addr),
-      waymask = waymask,
-      data = Wire(new BankedMetaBundle)
-        .apply(tag = meta.tag, valid = true.B, dirty = true.B)
-    )
-    io.dataReadBus(i).apply(
-      valid = state === s_memWriteReq && state2 === s2_idle,
-      setIdx = Cat(addr.index, writeBeatCnt.value)
-    )
-
+    wordMask(i) := Mux(req(i).isWrite(), MaskExpand(req(i).wmask), 0.U(DataBits.W))
 
   }
+
+  val hitWrite = hit(0) && req(0).isWrite()
+
+  val dataHitWriteBus = Wire(CacheDataArrayWriteBus()).apply(
+    data =
+      Wire(new BankedDataBundle).apply(MaskData(dataRead(0), req(0).wdata, wordMask(0))),
+    valid = hitWrite,
+    setIdx = Cat(addr(0).index, addr(0).bankIndex),
+    waymask = waymask(0)
+  )
+
+  val metaHitWriteBus = Wire(CacheMetaArrayWriteBus()).apply(
+    valid = hitWrite && !meta(0).dirty,
+    setIdx = getMetaIdx(req(0).addr),
+    waymask = waymask(0),
+    data = Wire(new BankedMetaBundle)
+      .apply(tag = meta(0).tag, valid = true.B, dirty = true.B)
+  )
+
 
   val s_idle :: s_memReadReq :: s_memReadResp :: s_memWriteReq :: s_memWriteResp :: s_mmio_wait :: s_mmioReq :: s_mmioResp :: s_wait_resp :: s_release :: Nil =
     Enum(10)
@@ -314,10 +344,14 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   val s2_idle :: s2_dataReadWait :: s2_dataOK :: Nil = Enum(3)
   val state2 = RegInit(s2_idle)
 
+  io.dataReadBus.apply(
+    valid = state === s_memWriteReq && state2 === s2_idle,
+    setIdx = Cat(addr(0).index, writeBeatCnt.value)
+  )
 
   val dataWay =
     RegEnable(io.dataReadBus.resp.data, state2 === s2_dataReadWait)
-  val dataHitWay = Mux1H(waymask, dataWay).data
+  val dataHitWay = Mux1H(waymask(0), dataWay).data
 
   switch(state2) {
     is(s2_idle) {
@@ -329,7 +363,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
       state2 := s2_dataOK
     }
     is(s2_dataOK) {
-      when(io.mem.req.fire() || hitReadBurst && io.out.ready) {
+      when(io.mem.req.fire() || hitReadBurst(0) && io.out(0).ready) {
         state2 := s2_idle
       }
     }
@@ -337,10 +371,10 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
 
   // critical word first read
   val raddr =
-    (if (XLEN == 64) Cat(req.addr(PAddrBits - 1, 3), 0.U(3.W))
-    else Cat(req.addr(PAddrBits - 1, 2), 0.U(2.W)))
+    (if (XLEN == 64) Cat(req(0).addr(PAddrBits - 1, 3), 0.U(3.W))
+    else Cat(req(0).addr(PAddrBits - 1, 2), 0.U(2.W)))
   // dirty block addr
-  val waddr = Cat(meta.tag, addr.index, 0.U(OffsetBits.W))
+  val waddr = Cat(meta(0).tag, addr(0).index, 0.U(OffsetBits.W))
   val cmd = Mux(
     state === s_memReadReq,
     SimpleBusCmd.readBurst,
@@ -369,7 +403,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
     !afterFirstRead && io.mem.resp.fire() && (state === s_memReadResp)
 
   // mmio
-  io.mmio.req.bits := req
+  io.mmio.req.bits := req(0)
   io.mmio.resp.ready := true.B
   io.mmio.req.valid := (state === s_mmioReq)
   val outBufferValid = WireInit(false.B)
@@ -402,28 +436,28 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
 
   MMIOStorePkt.ready := io.mmio.req.fire() && (state === s_mmioReq)
 
-  io.mmio.req.bits := Mux(mmioStorePending, mmioStoreReqLatch, req)
+  io.mmio.req.bits := Mux(mmioStorePending, mmioStoreReqLatch, req(0))
 
   // for inst in flash, the max fetch width is 32bit
   val FlashWidth = 4 // 4 Byte
   val mmioCnt = Counter(8 / FlashWidth)
   val FlashInst = RegInit(0.U(64.W))
-  val mmioReqOnce = req.addr(2)
+  val mmioReqOnce = req(0).addr(2)
   val mmioCntMax = Mux(mmioReqOnce, 0.U, 1.U)
 
   switch(state) {
     is(s_idle) {
       afterFirstRead := false.B
 
-      when((miss && !storeHit || mmio) && !io.flush || mmioStorePending) {
+      when((miss(0) && !storeHit || mmio(0)) && !io.flush || mmioStorePending) {
         //        state := Mux(meta.dirty, s_memWriteReq, s_memReadReq)
         state := Mux(
           mmioStorePending,
           Mux(outBufferValid, s_mmioReq, s_mmio_wait),
           Mux(
-            mmio,
+            mmio(0),
             s_mmioReq,
-            Mux(meta.dirty, s_memWriteReq, s_memReadReq)
+            Mux(meta(0).dirty, s_memWriteReq, s_memReadReq)
           )
         )
       }
@@ -442,14 +476,14 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
     }
     is(s_mmioResp) {
       when(io.mmio.resp.fire()) {
-        state := Mux(mmio, s_wait_resp, s_idle)
+        state := Mux(mmio(0), s_wait_resp, s_idle)
       }
     }
 
     is(s_memReadReq) {
       when(io.mem.req.fire()) {
         state := s_memReadResp
-        readBeatCnt.value := addr.bankIndex
+        readBeatCnt.value := addr(0).bankIndex
       }
     }
 
@@ -478,7 +512,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
       }
     }
     is(s_wait_resp) {
-      when(io.out.fire() ) {
+      when(io.out(0).fire() ) {
         state := s_idle
       }
     }
@@ -486,15 +520,15 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
 
   val dataRefill = MaskData(
     io.mem.resp.bits.rdata,
-    req.wdata,
-    Mux(readingFirst, wordMask, 0.U(DataBits.W))
+    req(0).wdata,
+    Mux(readingFirst, wordMask(0), 0.U(DataBits.W))
   )
   //  dontTouch(dataRefill)
   val dataRefillWriteBus = Wire(CacheDataArrayWriteBus).apply(
     valid = (state === s_memReadResp) && io.mem.resp.fire(),
-    setIdx = Cat(addr.index, readBeatCnt.value),
+    setIdx = Cat(addr(0).index, readBeatCnt.value),
     data = Wire(new BankedDataBundle).apply(dataRefill),
-    waymask = waymask
+    waymask = waymask(0)
   )
 
   dataWriteArb.io.in(0) <> dataHitWriteBus.req
@@ -506,9 +540,9 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
       (state === s_memReadResp) && io.mem.resp.fire() && io.mem.resp.bits
         .isReadLast(),
     data = Wire(new BankedMetaBundle)
-      .apply(valid = true.B, tag = addr.tag, dirty = req.isWrite()),
-    setIdx = getMetaIdx(req.addr),
-    waymask = waymask
+      .apply(valid = true.B, tag = addr(0).tag, dirty = req(0).isWrite()),
+    setIdx = getMetaIdx(req(0).addr),
+    waymask = waymask(0)
   )
 
   val writeDirtyTag =
@@ -519,25 +553,25 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   metaWriteArb.io.in(1) <> metaRefillWriteBus.req
   io.metaWriteBus.req <> metaWriteArb.io.out
 
-  io.out.bits.user.zip(req.user).map { case (o, i) => o := i }
-  io.out.bits.id.zip(req.id).map { case (o, i) => o := i }
+  io.out(0).bits.user.zip(req(0).user).map { case (o, i) => o := i }
+  io.out(0).bits.id.zip(req(0).id).map { case (o, i) => o := i }
 
   // out is valid when cacheline is refilled
-  io.out.valid := io.in.valid && Mux(
-    hit || storeHit,
+  io.out(0).valid := io.in(0).valid && Mux(
+    hit(0) || storeHit,
     true.B,
     state === s_wait_resp
   )
   val inRdataRegDemand = RegEnable(
-    Mux(mmio, io.mmio.resp.bits.rdata, io.mem.resp.bits.rdata),
-    Mux(mmio, state === s_mmioResp, readingFirst)
+    Mux(mmio(0), io.mmio.resp.bits.rdata, io.mem.resp.bits.rdata),
+    Mux(mmio(0), state === s_mmioResp, readingFirst)
   )
-  io.out.bits.rdata := Mux(hit, dataRead, inRdataRegDemand)
+  io.out(0).bits.rdata := Mux(hit(0), dataRead(0), inRdataRegDemand)
 
-  io.out.bits.cmd := Mux(
-    io.in.bits.req.isRead(),
+  io.out(0).bits.cmd := Mux(
+    io.in(0).bits.req.isRead(),
     SimpleBusCmd.readLast,
-    Mux(io.in.bits.req.isWrite(), SimpleBusCmd.writeResp, DontCare)
+    Mux(io.in(0).bits.req.isWrite(), SimpleBusCmd.writeResp, DontCare)
   ) // DontCare, added by lemover
 
   // With critical-word first, the pipeline registers between
@@ -545,7 +579,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   // is totally handled. We use io.isFinish to indicate when the
   // request really ends.
 
-  io.in.ready := io.out.ready && state === s_idle && !miss
+  io.in(0).ready := io.out(0).ready && state === s_idle && !miss(0)
 
   // stall when read req in s2 cant be responed or read req in s1 cant be send to s2( s1.in.ready === false.B)
   //    val cacheStall = WireInit(false.B)
