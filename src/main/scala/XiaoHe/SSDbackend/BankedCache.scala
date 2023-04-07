@@ -236,7 +236,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
     val metaReadResp = Vec(2, Flipped(Vec(Ways, new BankedMetaBundle)))
     val dataReadResp = Vec(2, Flipped(Vec(Ways, new BankedDataBundle)))
 
-    val dataReadBus = CacheDataArrayReadBus()
+    val dataReadBus = Vec(2, CacheDataArrayReadBus())
     val metaWriteBus = CacheMetaArrayWriteBus()
     val dataWriteBus = CacheDataArrayWriteBus()
 
@@ -341,18 +341,23 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   val s2_idle :: s2_dataReadWait :: s2_dataOK :: Nil = Enum(3)
   val state2 = RegInit(s2_idle)
 
-  io.dataReadBus.apply(
+  io.dataReadBus(0).apply(
     valid = state === s_memWriteReq && state2 === s2_idle,
     setIdx = Cat(addr(0).index, writeBeatCnt.value)
   )
 
+  io.dataReadBus(1).apply(
+    valid = false.B,
+    setIdx = 0.U
+  )
+
   val dataWay =
-    RegEnable(io.dataReadBus.resp.data, state2 === s2_dataReadWait)
+    RegEnable(io.dataReadBus(0).resp.data, state2 === s2_dataReadWait)
   val dataHitWay = Mux1H(waymask(0), dataWay).data
 
   switch(state2) {
     is(s2_idle) {
-      when(io.dataReadBus.req.fire()) {
+      when(io.dataReadBus(0).req.fire()) {
         state2 := s2_dataReadWait
       }
     }
@@ -797,21 +802,21 @@ class SSDCache(implicit val cacheConfig: BankedCacheConfig)
         way = Ways
       )
     )
-    val flushDCache = Module(new BankedflushDCache)
+    // val flushDCache = Module(new BankedflushDCache)
     dataArray.io.r(0) <> s1.io.dataReadBus
     dataArray.io.r(1) <> s2.io.dataReadBus
-    dataArray.io.r(2) <> flushDCache.io.dataReadBus
+    // dataArray.io.r(2) <> flushDCache.io.dataReadBus
 
 
     metaArray.io.r(0) <> s1.io.metaReadBus
-    metaArray.io.r(1) <> flushDCache.io.metaReadBus
+    // metaArray.io.r(1) <> flushDCache.io.metaReadBus
 
     metaArray.io.w(0) <> s2.io.metaWriteBus
-    metaArray.io.w(1) <> flushDCache.io.metaWriteBus
+    // metaArray.io.w(1) <> flushDCache.io.metaWriteBus
 
 
     val Xbar = Module(new SimpleBusCrossbarNto1(2))
-    Xbar.io.in(0) <> flushDCache.io.mem
+    // Xbar.io.in(0) <> flushDCache.io.mem
     Xbar.io.in(1) <> s2.io.mem
 
     s1.io.in(0) <> io.in(0).req

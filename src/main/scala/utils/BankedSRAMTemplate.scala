@@ -32,7 +32,7 @@
 
 package utils
 
-import XiaoHe.SSDbackend.{BankedCacheBundle, BankedCacheModule, BankedCacheConfig}
+import XiaoHe.SSDbackend.{BankedCacheBundle, BankedCacheModule, BankedCacheConfig,BankedDataBundle}
 import chisel3._
 import chisel3.util._
 
@@ -111,7 +111,8 @@ class L1BankedDataReadLineReq(implicit val p: BankedCacheConfig) extends L1Banke
 // Now, we can write a cache-block in a single cycle
 class L1BankedDataWriteReq(implicit val p: BankedCacheConfig) extends L1BankedDataReadReq {
   val wmask = Bits(DCacheBanks.W)
-  val data = Vec(DCacheBanks, Bits(LineSize.W))
+  // val data = Vec(DCacheBanks, Bits(LineSize.W))
+  val data = Bits(LineSize.W)
 
   def apply(addr: UInt, wmask: UInt, data: UInt){
     this.addr := addr
@@ -289,7 +290,7 @@ class BankedDataArray(implicit val p: BankedCacheConfig) extends AbstractBankedD
       )
       data_bank(w).io.r.req.valid := io.r.en
       data_bank(w).io.r.req.bits.apply(setIdx = io.r.addr)
-      io.r.data(w) := data_bank(w).io.r.resp.data
+      io.r.data(w) := data_bank(w).io.r.resp.data(0)
     }
 
     // io.r.data := row_data
@@ -340,7 +341,7 @@ class BankedDataArray(implicit val p: BankedCacheConfig) extends AbstractBankedD
     val data_bank = data_banks(bank_index)
     data_bank.io.r.en := bank_addr_matchs.asUInt.orR 
     data_bank.io.r.addr := bank_set_addr
-    bank_result(bank_index) := data_bank.io.r.data
+    bank_result(bank_index) := data_bank.io.r.data.asTypeOf(Vec(nWays,new L1BankedDataReadResult))
 
   }
 
@@ -367,24 +368,44 @@ class BankedDataArray(implicit val p: BankedCacheConfig) extends AbstractBankedD
 class BankedDataArrayWithArbiter[T <: Data](nRead: Int, gen: T, set: Int, way: Int = 1,
                                          shouldReset: Boolean = false) (implicit val cacheConfig: BankedCacheConfig)extends Module {
   val io = IO(new Bundle {
-    val r = Flipped(Vec(nRead, Vec(2, new L1BankedDataReadReq)))
-    val res = Vec(2, Vec(4,new L1BankedDataReadResult))
-    val w = Flipped(new SRAMWriteBus(gen, set, way))
+    val r = Flipped(Vec(nRead, Vec(2, new BankedSRAMReadBus(gen, set, way))))
+    val w = Flipped(new BankedSRAMWriteBus(gen, set, way))
   })
 
   val ram = Module(new BankedDataArray)
 
   ram.io.write.bits.wmask := io.w.req.bits.waymask.getOrElse(0.U)
-  ram.io.write.bits.data := io.w.req.bits.data
+  ram.io.write.bits.data := io.w.req.bits.data.asUInt()
   ram.io.write.bits.addr := io.w.req.bits.setIdx
+  ram.io.write.valid := io.w.req.valid
+  io.w.req.ready := ram.io.write.ready
   
 
-  val readArb = Module(new Arbiter(chiselTypeOf(io.r(0)), nRead))
-  readArb.io.in <> VecInit(io.r(1),io.r(0))
-  ram.io.read <> readArb.io.out
+  // val readArb = Module(new Arbiter(chiselTypeOf(io.r(0).req.bits), 2))
+  // readArb.io.in <> VecInit(io.r(1).req,io.r(0).req)
+  val arb = Mux(io.r(0)(0).req.valid || io.r(0)(1).req.valid ,io.r(0),io.r(1) )
+  val req0 = arb(0).req
+  val req1 = arb(1).req
+  ram.io.read(0).bits.way_en := "b1111".U //?haha
+  ram.io.read(0).bits.addr := req0.bits.setIdx
+  ram.io.read(0).valid := req0.valid
 
-  // latch read results
-  io.res.map{ case r => {
-    r := HoldUnless(ram.io.resp, RegNext(r.fire()))
+  when(io.r(0)(0).req.valid || io.r(0)(1).req.valid){
+    io.r(0)(0).req.ready := ram.io.read(0).ready
+    io.r(0)(1).req.ready := ram.io.read(1).ready
+  }.otherwise{
+    io.r(1)(0).req.ready := ram.io.read(0).ready
+    io.r(1)(1).req.ready := ram.io.read(1).ready
+  }
+
+  ram.io.read(1).bits.way_en := "b1111".U //?haha
+  ram.io.read(1).bits.addr := req1.bits.setIdx
+  ram.io.read(1).valid := req1.valid
+
+    // latch read results
+  io.r.map{ case r => {
+    r.zipWithIndex.map{ case (t,i)=> {
+      t.resp.data := HoldUnless(ram.io.resp(i), RegNext(t.req.fire())).asTypeOf(Vec(way, new BankedDataBundle))
+    }}
   }}
 }
