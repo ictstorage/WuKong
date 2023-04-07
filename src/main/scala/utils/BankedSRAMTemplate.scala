@@ -32,7 +32,7 @@
 
 package utils
 
-import XiaoHe.SSDbackend.{CacheBundle, CacheModule, SSDCacheConfig}
+import XiaoHe.SSDbackend.{BankedCacheBundle, BankedCacheModule, BankedCacheConfig}
 import chisel3._
 import chisel3.util._
 
@@ -94,22 +94,22 @@ class BankedSRAMWriteBus[T <: Data](private val gen: T, val set: Int, val way: I
 
 
 
-class L1BankedDataReadReq(implicit val cacheConfig: SSDCacheConfig) extends CacheBundle {
+class L1BankedDataReadReq(implicit val cacheConfig: BankedCacheConfig) extends BankedCacheBundle {
   val way_en = Bits(DCacheWays.W)
   val addr = Bits(PAddrBits.W)
 }
 
-class L1BankedDataReadLineReq(implicit val p: SSDCacheConfig) extends L1BankedDataReadReq {
+class L1BankedDataReadLineReq(implicit val p: BankedCacheConfig) extends L1BankedDataReadReq {
   val rmask = Bits(DCacheBanks.W)
 }
 
 // Now, we can write a cache-block in a single cycle
-class L1BankedDataWriteReq(implicit val p: SSDCacheConfig) extends L1BankedDataReadReq {
+class L1BankedDataWriteReq(implicit val p: BankedCacheConfig) extends L1BankedDataReadReq {
   val wmask = Bits(DCacheBanks.W)
   val data = Vec(DCacheBanks, Bits(LineSize.W))
 }
 
-class L1BankedDataReadResult(implicit val cacheConfig: SSDCacheConfig) extends CacheBundle {
+class L1BankedDataReadResult(implicit val cacheConfig: BankedCacheConfig) extends BankedCacheBundle {
   // you can choose which bank to read to save power
   val raw_data = Bits(LineSize.W)
 //  val error = Bool() // slow to generate, use it with care
@@ -183,7 +183,7 @@ class BankedSRAMTemplate[T <: Data](gen: T, set: Int, way: Int = 1,
 
 }
 
-abstract class AbstractBankedDataArray(implicit val cacheConfig: SSDCacheConfig) extends CacheModule {
+abstract class AbstractBankedDataArray(implicit val cacheConfig: BankedCacheConfig) extends BankedCacheModule {
   val ReadlinePortErrorIndex = LoadPipelineWidth
   val io = IO(new Bundle {
     // load pipeline read word req
@@ -202,7 +202,7 @@ abstract class AbstractBankedDataArray(implicit val cacheConfig: SSDCacheConfig)
     val bank_conflict_fast = Output(Vec(LoadPipelineWidth, Bool()))
     // customized cache op port
     //    val cacheOp = Flipped(new L1CacheInnerOpIO)
-    //    override implicit val cacheConfig: SSDCacheConfig = _
+    //    override implicit val cacheConfig: BankedCacheConfig = _
   })
   assert(LoadPipelineWidth <= 2) // BankedDataArray is designed for no more than 2 read ports
 
@@ -233,8 +233,7 @@ abstract class AbstractBankedDataArray(implicit val cacheConfig: SSDCacheConfig)
 
 
 
-
-class BankedDataArray(implicit val p: SSDCacheConfig) extends AbstractBankedDataArray {
+class BankedDataArray(implicit val p: BankedCacheConfig) extends AbstractBankedDataArray {
 
 
   val ReduceReadlineConflict = false
@@ -417,3 +416,22 @@ class BankedDataArray(implicit val p: SSDCacheConfig) extends AbstractBankedData
 
 }
 
+class BankedDataArrayWithArbiter[T <: Data](nRead: Int, gen: T, set: Int, way: Int = 1,
+                                         shouldReset: Boolean = false) (implicit val cacheConfig: BankedCacheConfig)extends Module {
+  val io = IO(new Bundle {
+    val r = Flipped(Vec(nRead, new SRAMReadBus(gen, set, way)))
+    val w = Flipped(new SRAMWriteBus(gen, set, way))
+  })
+
+  val ram = Module(new BankedDataArray)
+  ram.io.w <> io.w
+
+  val readArb = Module(new Arbiter(chiselTypeOf(io.r(0).req.bits), nRead))
+  readArb.io.in <> io.r.map(_.req)
+  ram.io.r.req <> readArb.io.out
+
+  // latch read results
+  io.r.map{ case r => {
+    r.resp.data := HoldUnless(ram.io.r.resp.data, RegNext(r.req.fire()))
+  }}
+}

@@ -119,7 +119,7 @@ class NutCore(implicit val p: NutCoreConfig) extends NutCoreModule {
   val mmioXbar = Module(new SimpleBusCrossbarNto1(2))
   val s2NotReady = WireInit(false.B)
   io.imem <> SSDICache(in = frontend.io.imem, mmio = mmioXbar.io.in(0), flush = (frontend.io.flushVec(0) | frontend.io.bpFlush))(SSDICacheConfig(ro = true, userBits = ICacheUserBundleWidth))
-  io.dmem <> SSDCache(in = SSDbackend.io.dmem, mmio = mmioXbar.io.in(1), flush = false.B)(SSDCacheConfig(ro = true))
+  io.dmem <> SSDCache(in = SSDbackend.io.dmem, mmio = mmioXbar.io.in(1), flush = false.B)(BankedCacheConfig(ro = true))
 
   // DMA?
   io.frontend.resp.bits := DontCare

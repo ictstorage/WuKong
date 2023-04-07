@@ -31,6 +31,8 @@ import XiaoHe._
 import XiaoHe.SSDbackend._
 import XiaoHe.SSDbackend.fu.StoreBufferEntry
 import XiaoHe.SSDfrontend._
+import nutcore.PipelineVector2Connect
+
 case class BankedCacheConfig(
                            ro: Boolean = false,
                            userBits: Int = 0,
@@ -156,20 +158,15 @@ class BankedCacheIO(implicit val cacheConfig: BankedCacheConfig)
     with BankedHasCacheConst {
   val in = Flipped(Vec(2, new SimpleBusUC(userBits = userBits, idBits = idBits)))
   val flush = Input(Bool())
-  val out = Vec(2, new SimpleBusC)
+  val out = new SimpleBusC
   val mmio = new SimpleBusUC
 }
-trait BankedHasBankedCacheIO {
-  implicit val cacheConfig: BankedCacheConfig
-  val io = IO(new BankedCacheIO)
-}
-
 trait HasBankedCacheIO {
   implicit val cacheConfig: BankedCacheConfig
   val io = IO(new BankedCacheIO)
 }
 
-sealed class BankedStage1IO(implicit val cacheConfig: BankedCacheConfig)
+sealed class BankedStage1Out(implicit val cacheConfig: BankedCacheConfig)
   extends BankedCacheBundle {
   val req = new SimpleBusReqBundle(userBits = userBits, idBits = idBits)
   val mmio = Output(Bool())
@@ -183,7 +180,7 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
         new SimpleBusReqBundle(userBits = userBits, idBits = idBits)
       ))
     )
-    val out = Vec(2, Decoupled(new BankedStage1IO))
+    val out = Vec(2, Decoupled(new BankedStage1Out))
     val metaReadBus = Vec(2, CacheMetaArrayReadBus())
     val dataReadBus = Vec(2, (CacheDataArrayReadBus()))
   }
@@ -230,8 +227,8 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
 // check
 sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   extends BankedCacheModule {
-  class BankedCacheStage1IO extends Bundle {
-    val in = Flipped(Vec(2, Decoupled(new BankedStage1IO)))
+  class BankedCacheStage2IO extends Bundle {
+    val in = Flipped(Vec(2, Decoupled(new BankedStage1Out)))
     val out = Vec(2, Decoupled(
       new SimpleBusRespBundle(userBits = userBits, idBits = idBits)
     ))
@@ -247,7 +244,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
     val mmio = new SimpleBusUC
   }
 
-  val io = IO(new BankedCacheStage1IO)
+  val io = IO(new BankedCacheStage2IO)
 
   val metaWriteArb = Module(new Arbiter(CacheMetaArrayWriteBus().req.bits, 3))
   val dataWriteArb = Module(new Arbiter(CacheDataArrayWriteBus().req.bits, 3))
@@ -775,19 +772,81 @@ class BankedflushDCache(implicit val cacheConfig: BankedCacheConfig)
   //    offsetCnt.reset()
   //  }
 }
+class SSDCache(implicit val cacheConfig: BankedCacheConfig)
+    extends BankedCacheModule
+    with HasBankedCacheIO {
+    // cache pipeline
 
-//object SSDCache {
-//  def apply(in: SimpleBusUC, mmio: SimpleBusUC, flush: Bool)(implicit
-//                                                             cacheConfig: BankedCacheConfig
-//  ) = {
-//    val cache = Module(new SSDCache)
-//
-//    cache.io.flush := flush
-//    cache.io.in <> in
-//    mmio <> cache.io.mmio
-//    cache.io.out
-//  }
-//}
+    val s1 = Module(new BankedCacheStage1)
+    val s2 = Module(new BankedCacheStage2)
+    val metaArray = Module(
+      new MetaSRAMTemplateWithArbiter(
+        nRead = 2,
+        nWrite = 2,
+        new BankedMetaBundle,
+        set = Sets,
+        way = Ways,
+        shouldReset = true
+      )
+    )
+    val dataArray = Module(
+      new BankedDataArrayWithArbiter(
+        nRead = 3,
+        new BankedDataBundle,
+        set = Sets * LineBeats,
+        way = Ways
+      )
+    )
+    val flushDCache = Module(new BankedflushDCache)
+    dataArray.io.r(0) <> s1.io.dataReadBus
+    dataArray.io.r(1) <> s2.io.dataReadBus
+    dataArray.io.r(2) <> flushDCache.io.dataReadBus
+
+
+    metaArray.io.r(0) <> s1.io.metaReadBus
+    metaArray.io.r(1) <> flushDCache.io.metaReadBus
+
+    metaArray.io.w(0) <> s2.io.metaWriteBus
+    metaArray.io.w(1) <> flushDCache.io.metaWriteBus
+
+
+    val Xbar = Module(new SimpleBusCrossbarNto1(2))
+    Xbar.io.in(0) <> flushDCache.io.mem
+    Xbar.io.in(1) <> s2.io.mem
+
+    s1.io.in(0) <> io.in(0).req
+    s1.io.in(1) <> io.in(1).req
+
+    // PipelineConnect(s1.io.out, s2.io.in, s2.io.out.fire(), io.flush)
+
+    PipelineVector2Connect(new BankedStage1Out, s1.io.out(0), s1.io.out(1), s2.io.in(0), s2.io.in(1),io.flush,64)
+    io.in(0).resp <> s2.io.out(0)
+    io.in(1).resp <> s2.io.out(1)
+    s2.io.flush := io.flush
+    io.out.mem <> Xbar.io.out
+    io.out.coh := DontCare
+    io.mmio <> s2.io.mmio
+
+
+    dataArray.io.w <> s2.io.dataWriteBus
+
+    s2.io.metaReadResp(0) := s1.io.metaReadBus(0).resp.data
+    s2.io.dataReadResp(0) := s1.io.dataReadBus(0).resp.data
+    s2.io.metaReadResp(1) := s1.io.metaReadBus(1).resp.data
+    s2.io.dataReadResp(1) := s1.io.dataReadBus(1).resp.data
+}
+object SSDCache {
+ def apply(in: Vec[SimpleBusUC], mmio: SimpleBusUC, flush: Bool)(implicit
+                                                            cacheConfig: BankedCacheConfig
+ ) = {
+   val cache = Module(new SSDCache)
+
+   cache.io.flush := flush
+   cache.io.in <> in
+   mmio <> cache.io.mmio
+   cache.io.out
+ }
+}
 
 //class SSDCacheTest(implicit val cacheConfig: BankedCacheConfig)
 //  extends BankedCacheModule

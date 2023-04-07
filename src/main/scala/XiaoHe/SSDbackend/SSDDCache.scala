@@ -726,82 +726,82 @@ class flushDCache(implicit val cacheConfig: SSDCacheConfig)
 //    offsetCnt.reset()
 //  }
 }
-class SSDCache(implicit val cacheConfig: SSDCacheConfig)
-    extends CacheModule
-    with HasSSDCacheIO {
-    // cache pipeline
+// class SSDCache(implicit val cacheConfig: SSDCacheConfig)
+//     extends CacheModule
+//     with HasSSDCacheIO {
+//     // cache pipeline
 
-    val s1 = Module(new SSDCacheStage1)
-    val s2 = Module(new SSDCacheStage2)
-    val metaArray = Module(
-      new MetaSRAMTemplateWithArbiter(
-        nRead = 2,
-        nWrite = 2,
-        new MetaBundle,
-        set = Sets,
-        way = Ways,
-        shouldReset = true
-      )
-    )
-    val dataArray = Module(
-      new ysyxSRAMTemplateWithArbiter(
-        nRead = 3,
-        new DataBundle,
-        set = Sets * LineBeats,
-        way = Ways
-      )
-    )
-    val flushDCache = Module(new flushDCache)
-    metaArray.io.r(1) <> flushDCache.io.metaReadBus
-    dataArray.io.r(2) <> flushDCache.io.dataReadBus
-    metaArray.io.w(1) <> flushDCache.io.metaWriteBus
+//     val s1 = Module(new SSDCacheStage1)
+//     val s2 = Module(new SSDCacheStage2)
+//     val metaArray = Module(
+//       new MetaSRAMTemplateWithArbiter(
+//         nRead = 2,
+//         nWrite = 2,
+//         new MetaBundle,
+//         set = Sets,
+//         way = Ways,
+//         shouldReset = true
+//       )
+//     )
+//     val dataArray = Module(
+//       new ysyxSRAMTemplateWithArbiter(
+//         nRead = 3,
+//         new DataBundle,
+//         set = Sets * LineBeats,
+//         way = Ways
+//       )
+//     )
+//     val flushDCache = Module(new flushDCache)
+//     metaArray.io.r(0) <> s1.io.metaReadBus
+//     metaArray.io.r(1) <> flushDCache.io.metaReadBus
+//     metaArray.io.w(1) <> flushDCache.io.metaWriteBus
+//     metaArray.io.w(0) <> s2.io.metaWriteBus
 
-    val Xbar = Module(new SimpleBusCrossbarNto1(2))
-    Xbar.io.in(0) <> flushDCache.io.mem
-    Xbar.io.in(1) <> s2.io.mem
+//     val Xbar = Module(new SimpleBusCrossbarNto1(2))
+//     Xbar.io.in(0) <> flushDCache.io.mem
+//     Xbar.io.in(1) <> s2.io.mem
 
-    s1.io.in <> io.in.req
+//     s1.io.in <> io.in.req
 
-    PipelineConnect(s1.io.out, s2.io.in, s2.io.out.fire(), io.flush)
+//     PipelineConnect(s1.io.out, s2.io.in, s2.io.out.fire(), io.flush)
 
-    io.in.resp <> s2.io.out
-    s2.io.flush := io.flush
-    io.out.mem <> Xbar.io.out
-    io.out.coh := DontCare
-    io.mmio <> s2.io.mmio
+//     io.in.resp <> s2.io.out
+//     s2.io.flush := io.flush
+//     io.out.mem <> Xbar.io.out
+//     io.out.coh := DontCare
+//     io.mmio <> s2.io.mmio
 
-    metaArray.io.r(0) <> s1.io.metaReadBus
-    dataArray.io.r(0) <> s1.io.dataReadBus
-    dataArray.io.r(1) <> s2.io.dataReadBus
+//     dataArray.io.r(0) <> s1.io.dataReadBus
+//     dataArray.io.r(1) <> s2.io.dataReadBus
+//     dataArray.io.r(2) <> flushDCache.io.dataReadBus
 
-    metaArray.io.w(0) <> s2.io.metaWriteBus
-    dataArray.io.w <> s2.io.dataWriteBus
+//     dataArray.io.w <> s2.io.dataWriteBus
 
-    s2.io.metaReadResp := s1.io.metaReadBus.resp.data
-    s2.io.dataReadResp := s1.io.dataReadBus.resp.data
+//     s2.io.metaReadResp := s1.io.metaReadBus.resp.data
+//     s2.io.dataReadResp := s1.io.dataReadBus.resp.data
 
-    val sdtag =
-        (s2.io.mem.req.valid && (s2.io.mem.req.bits.addr === "hfc011718".U))
-    dontTouch(sdtag)
+//     val sdtag =
+//         (s2.io.mem.req.valid && (s2.io.mem.req.bits.addr === "hfc011718".U))
+//     dontTouch(sdtag)
 
-    // test tmp
-    val dataIndexTag =
-        dataArray.io.w.req.valid && dataArray.io.w.req.bits.setIdx === "h16e".U
+//     // test tmp
+//     val dataIndexTag =
+//         dataArray.io.w.req.valid && dataArray.io.w.req.bits.setIdx === "h16e".U
 
-}
+// }
 
-object SSDCache {
-    def apply(in: SimpleBusUC, mmio: SimpleBusUC, flush: Bool)(implicit
-        cacheConfig: SSDCacheConfig
-    ) = {
-        val cache = Module(new SSDCache)
+// object SSDCache {
+//     def apply(in: SimpleBusUC, mmio: SimpleBusUC, flush: Bool)(implicit
+//         cacheConfig: SSDCacheConfig
+//     ) = {
+//         val cache = Module(new SSDCache)
 
-        cache.io.flush := flush
-        cache.io.in <> in
-        mmio <> cache.io.mmio
-        cache.io.out
-    }
-}
+//         cache.io.flush := flush
+//         cache.io.in <> in
+//         mmio <> cache.io.mmio
+//         cache.io.out
+//     }
+// }
 
 class SSDCacheTest(implicit val cacheConfig: SSDCacheConfig)
   extends CacheModule
@@ -829,8 +829,14 @@ class SSDCacheTest(implicit val cacheConfig: SSDCacheConfig)
         )
     )
     val flushDCache = Module(new flushDCache)
-    metaArray.io.r(1) <> flushDCache.io.metaReadBus
+    dataArray.io.r(0) <> s1.io.dataReadBus
+    dataArray.io.r(1) <> s2.io.dataReadBus
     dataArray.io.r(2) <> flushDCache.io.dataReadBus
+
+    metaArray.io.r(0) <> s1.io.metaReadBus
+    metaArray.io.r(1) <> flushDCache.io.metaReadBus
+
+    metaArray.io.w(0) <> s2.io.metaWriteBus
     metaArray.io.w(1) <> flushDCache.io.metaWriteBus
 
     val Xbar = Module(new SimpleBusCrossbarNto1(2))
@@ -847,11 +853,7 @@ class SSDCacheTest(implicit val cacheConfig: SSDCacheConfig)
     io.out.coh := DontCare
     io.mmio <> s2.io.mmio
 
-    metaArray.io.r(0) <> s1.io.metaReadBus
-    dataArray.io.r(0) <> s1.io.dataReadBus
-    dataArray.io.r(1) <> s2.io.dataReadBus
 
-    metaArray.io.w(0) <> s2.io.metaWriteBus
     dataArray.io.w <> s2.io.dataWriteBus
 
     s2.io.metaReadResp := s1.io.metaReadBus.resp.data
