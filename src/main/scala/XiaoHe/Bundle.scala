@@ -117,6 +117,16 @@ class FunctionUnitIO extends NutCoreBundle {
   val out = Decoupled(Output(UInt(XLEN.W)))
 }
 
+class BankedFunctionUnitIO extends NutCoreBundle {
+  val in = Vec(2, Flipped(Decoupled(new Bundle {
+    val src1 = Output(UInt(XLEN.W))
+    val src2 = Output(UInt(XLEN.W))
+    val offset = Output(UInt(XLEN.W))
+    val func = Output(FuOpType())
+  })))
+  val out = Vec(2, Decoupled(Output(UInt(XLEN.W))))
+}
+
 class ForwardIO extends NutCoreBundle {
   val valid = Output(Bool())
   val wb = new WriteBackIO

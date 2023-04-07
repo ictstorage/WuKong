@@ -49,15 +49,14 @@ object LSUOpType { //TODO: refactor LSU fuop
   def atomD = "011".U
 }
 
-class SSDLSUIO extends FunctionUnitIO{
-  val offset = Input(UInt(XLEN.W))
+class SSDLSUIO extends BankedFunctionUnitIO {
   val memStall = Output(Bool())
   val invalid = Input(Vec(3,Bool()))
   //??? for what
   val LoadReady = Output(Bool())
   val StoreReady = Output(Bool())
-  
-  val dmem = new SimpleBusUC(addrBits = VAddrBits)
+  val dmem = Vec(2, new SimpleBusUC(addrBits = VAddrBits))
+
   val storeBypassCtrl = Flipped((new LSUPipeBypassCtrl).storeBypassCtrlE2)
   val storeBypassPort = Flipped((new StorePipeBypassPort).storeBypassPortE2)
   val isMMIO = Output(Bool())
@@ -83,15 +82,20 @@ class storePipeEntry extends StoreBufferEntry{
 
 class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   val io = IO(new SSDLSUIO)
-  val (valid, src1, src2, func, invalid, offset) = (io.in.valid, io.in.bits.src1, io.in.bits.src2, io.in.bits.func, io.invalid, io.offset)
-  def access(valid: Bool, src1: UInt, src2: UInt, func: UInt, offset: UInt): UInt = {
-    this.valid := valid
-    this.src1 := src1
-    this.src2 := src2
-    this.func := func
-    this.offset := offset
-    io.out.bits
-  }
+  val (valid, src1, src2, func, invalid, offset) = (VecInit(io.in(1).valid,io.in(0).valid),
+    VecInit(io.in(1).bits.src1, io.in(0).bits.src1),
+    VecInit(io.in(1).bits.src2, io.in(0).bits.src2),
+    VecInit(io.in(1).bits.func, io.in(0).bits.func),
+    io.invalid,
+    VecInit(io.in(1).bits.offset, io.in(0).bits.offset))
+//  def access(valid: Bool, src1: UInt, src2: UInt, func: UInt, offset: UInt): UInt = {
+//    this.valid := valid
+//    this.src1 := src1
+//    this.src2 := src2
+//    this.func := func
+//    this.offset := offset
+//    io.out.bits
+//  }
   def genWmask(addr: UInt, sizeEncode: UInt): UInt = {
     LookupTree(sizeEncode, List(
       "b00".U -> 0x1.U, //0001 << addr(2:0)
@@ -119,7 +123,8 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   val reqWdata = genWdata(wdata, size)
   val reqWmask = genWmask(addr, size)
 
-  val loadPipe = Module(new SSDLoadPipe)
+  val loadPipe0 = Module(new SSDLoadPipe)
+  val loadPipe1 = Module(new SSDLoadPipe)
   //store pipeline
   /*
   ||----------EX2------------||
@@ -137,11 +142,13 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   // storeCacheIn \ loadCacheIn --> cacheIn
   val cacheIn = Wire(Decoupled(new SimpleBusReqBundle))
   val storeCacheIn = Wire(Decoupled(new SimpleBusReqBundle))
-  val loadCacheIn = Wire(Decoupled(new SimpleBusReqBundle))
+
+  val loadCacheIn = Wire(Vec(2, Decoupled(new SimpleBusReqBundle)))
 //  dontTouch(cacheIn)
 //  dontTouch(storeCacheIn)
 //  dontTouch(loadCacheIn)
-  io.dmem.req <> cacheIn
+  io.dmem(0).req <> cacheIn
+  io.dmem(1).req <>
   //store buffer
   val storeBuffer = Module(new StoreBuffer)
   //MMIO & OutBuffer
@@ -199,25 +206,41 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   lsuPipeStage4.io.isStall := io.memStall //There is only one stall point in LSU
 
 
-  loadPipe.io.in.bits.src1 := src1
-  loadPipe.io.in.bits.offset := offset
-  loadPipe.io.in.bits.func := func
-  loadPipe.io.in.valid := io.in.valid && isLoad
-  loadPipe.io.storePipeE3.bits <> lsuPipeOut(0).bits
-  loadPipe.io.storePipeE4.bits <> lsuPipeOut(1).bits
-  loadPipe.io.storePipeE3.valid <> lsuPipeOut(0).valid
-  loadPipe.io.storePipeE4.valid <> lsuPipeOut(1).valid
-  loadPipe.io.storebuffer <> storeBuffer.io.snapshot
-  loadPipe.io.writePtr <> storeBuffer.io.writePtr
-  loadPipe.io.readPtr <> storeBuffer.io.readPtr
-  loadPipe.io.dmem.req <> loadCacheIn
-  loadPipe.io.dmem.resp <> io.dmem.resp
-  loadPipe.io.invalid <> invalid(0)
-  loadPipe.io.stall := io.memStall
-  loadPipe.io.pc := pc
+  loadPipe0.io.in.bits.src1 := src1
+  loadPipe0.io.in.bits.offset := offset
+  loadPipe0.io.in.bits.func := func
+  loadPipe0.io.in.valid := io.in.valid && isLoad
+  loadPipe0.io.storePipeE3.bits <> lsuPipeOut(0).bits
+  loadPipe0.io.storePipeE4.bits <> lsuPipeOut(1).bits
+  loadPipe0.io.storePipeE3.valid <> lsuPipeOut(0).valid
+  loadPipe0.io.storePipeE4.valid <> lsuPipeOut(1).valid
+  loadPipe0.io.storebuffer <> storeBuffer.io.snapshot
+  loadPipe0.io.writePtr <> storeBuffer.io.writePtr
+  loadPipe0.io.readPtr <> storeBuffer.io.readPtr
+  loadPipe0.io.dmem.req <> loadCacheIn(0)
+  loadPipe0.io.dmem.resp <> io.dmem(0).resp
+  loadPipe0.io.invalid <> invalid(0)
+  loadPipe0.io.stall := io.memStall
+  loadPipe0.io.pc := pc
 
+  loadPipe1.io.in.bits.src1 := src1
+  loadPipe1.io.in.bits.offset := offset
+  loadPipe1.io.in.bits.func := func
+  loadPipe1.io.in.valid := io.in.valid && isLoad
+  loadPipe1.io.storePipeE3.bits <> lsuPipeOut(0).bits
+  loadPipe1.io.storePipeE4.bits <> lsuPipeOut(1).bits
+  loadPipe1.io.storePipeE3.valid <> lsuPipeOut(0).valid
+  loadPipe1.io.storePipeE4.valid <> lsuPipeOut(1).valid
+  loadPipe1.io.storebuffer <> storeBuffer.io.snapshot
+  loadPipe1.io.writePtr <> storeBuffer.io.writePtr
+  loadPipe1.io.readPtr <> storeBuffer.io.readPtr
+  loadPipe1.io.dmem.req <> loadCacheIn(1)
+  loadPipe1.io.dmem.resp <> io.dmem(1).resp
+  loadPipe1.io.invalid <> invalid(0)
+  loadPipe1.io.stall := io.memStall
+  loadPipe1.io.pc := pc
 
-  io.out <> loadPipe.io.out  
+  io.out <> loadPipe0.io.out
 
   io.LoadReady := cacheIn.ready && !storeBuffer.io.isAlmostFull
   io.StoreReady := lsuPipeIn(0).ready
