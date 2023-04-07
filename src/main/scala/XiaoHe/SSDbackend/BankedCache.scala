@@ -595,183 +595,183 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
 // check
 
 
-class BankedflushDCache(implicit val cacheConfig: BankedCacheConfig)
-  extends BankedCacheModule {
-  class BankedflushDCacheIO extends NutCoreBundle {
-    //    val metaReadResp = Flipped(Vec(Ways, new BankedMetaBundle))
-    val metaReadBus = CacheMetaArrayReadBus()
+// class BankedflushDCache(implicit val cacheConfig: BankedCacheConfig)
+//   extends BankedCacheModule {
+//   class BankedflushDCacheIO extends NutCoreBundle {
+//     //    val metaReadResp = Flipped(Vec(Ways, new BankedMetaBundle))
+//     val metaReadBus = CacheMetaArrayReadBus()
 
-    //    val dataReadResp = Flipped(Vec(Ways, new BankedDataBundle))
-    val dataReadBus = CacheDataArrayReadBus()
+//     //    val dataReadResp = Flipped(Vec(Ways, new BankedDataBundle))
+//     val dataReadBus = CacheDataArrayReadBus()
 
-    val metaWriteBus = CacheMetaArrayWriteBus()
+//     val metaWriteBus = CacheMetaArrayWriteBus()
 
-    val mem = new SimpleBusUC
-  }
-  val io = IO(new BankedflushDCacheIO)
-  val BankedflushDCache = WireInit(false.B)
-  BoringUtils.addSink(BankedflushDCache, "MOUBankedflushDCache")
+//     val mem = new SimpleBusUC
+//   }
+//   val io = IO(new BankedflushDCacheIO)
+//   val BankedflushDCache = WireInit(false.B)
+//   BoringUtils.addSink(BankedflushDCache, "MOUBankedflushDCache")
 
-  val way_idle :: way_flush :: way_cntinc :: way_done :: Nil = Enum(4)
-  val idx_idle :: dirty_check_req :: dirty_check_resp :: dirty_true :: idx_cntinc :: idx_done :: Nil =
-    Enum(6)
-  val offset_idle :: read_req :: read_resp :: wb_ok :: offset_cntinc :: offset_done :: Nil =
-    Enum(6)
-  val wayCnt = Counter(Ways)
-  val idxCnt = Counter(Sets)
-  val offsetCnt = Counter(8)
-  val way_state = RegInit(way_idle)
-  val idx_state = RegInit(idx_idle)
-  val offset_state = RegInit(offset_idle)
+//   val way_idle :: way_flush :: way_cntinc :: way_done :: Nil = Enum(4)
+//   val idx_idle :: dirty_check_req :: dirty_check_resp :: dirty_true :: idx_cntinc :: idx_done :: Nil =
+//     Enum(6)
+//   val offset_idle :: read_req :: read_resp :: wb_ok :: offset_cntinc :: offset_done :: Nil =
+//     Enum(6)
+//   val wayCnt = Counter(Ways)
+//   val idxCnt = Counter(Sets)
+//   val offsetCnt = Counter(8)
+//   val way_state = RegInit(way_idle)
+//   val idx_state = RegInit(idx_idle)
+//   val offset_state = RegInit(offset_idle)
 
-  switch(way_state) {
-    is(way_idle) {
-      when(BankedflushDCache) {
-        way_state := way_flush
-      }
-    }
-    is(way_flush) {
-      when(idx_state === idx_done) {
-        way_state := way_cntinc
-      }
-    }
-    is(way_cntinc) {
-      when(wayCnt.value === 3.U) {
-        way_state := way_done
-      }.elsewhen(wayCnt.value =/= 3.U) {
-        way_state := way_flush
-      }
-      wayCnt.inc()
-    }
-    is(way_done) {
-      way_state := way_idle
-    }
-  }
+//   switch(way_state) {
+//     is(way_idle) {
+//       when(BankedflushDCache) {
+//         way_state := way_flush
+//       }
+//     }
+//     is(way_flush) {
+//       when(idx_state === idx_done) {
+//         way_state := way_cntinc
+//       }
+//     }
+//     is(way_cntinc) {
+//       when(wayCnt.value === 3.U) {
+//         way_state := way_done
+//       }.elsewhen(wayCnt.value =/= 3.U) {
+//         way_state := way_flush
+//       }
+//       wayCnt.inc()
+//     }
+//     is(way_done) {
+//       way_state := way_idle
+//     }
+//   }
 
-  switch(idx_state) {
-    is(idx_idle) {
-      when(way_state === way_flush) {
-        idx_state := dirty_check_req
-      }
-    }
-    is(dirty_check_req) {
-      when(io.metaReadBus.req.fire()) {
-        idx_state := dirty_check_resp
-      }
-    }
-    is(dirty_check_resp) {
-      when(
-        Mux1H(MemValid(wayCnt.value), io.metaReadBus.resp.data).dirty
-      ) {
-        idx_state := dirty_true
-      }.otherwise {
-        idx_state := idx_cntinc
-      }
-    }
-    is(dirty_true) {
-      when(offset_state === offset_done) {
-        idx_state := idx_cntinc
-      }
-    }
-    is(idx_cntinc) {
-      when(idxCnt.value === ((Sets - 1).U)) {
-        idx_state := idx_done
-      }.elsewhen(idxCnt.value =/= (Sets - 1).U) {
-        idx_state := dirty_check_req
-      }
-      idxCnt.inc()
-    }
-    is(idx_done) {
-      idx_state := idx_idle
-    }
-  }
+//   switch(idx_state) {
+//     is(idx_idle) {
+//       when(way_state === way_flush) {
+//         idx_state := dirty_check_req
+//       }
+//     }
+//     is(dirty_check_req) {
+//       when(io.metaReadBus.req.fire()) {
+//         idx_state := dirty_check_resp
+//       }
+//     }
+//     is(dirty_check_resp) {
+//       when(
+//         Mux1H(MemValid(wayCnt.value), io.metaReadBus.resp.data).dirty
+//       ) {
+//         idx_state := dirty_true
+//       }.otherwise {
+//         idx_state := idx_cntinc
+//       }
+//     }
+//     is(dirty_true) {
+//       when(offset_state === offset_done) {
+//         idx_state := idx_cntinc
+//       }
+//     }
+//     is(idx_cntinc) {
+//       when(idxCnt.value === ((Sets - 1).U)) {
+//         idx_state := idx_done
+//       }.elsewhen(idxCnt.value =/= (Sets - 1).U) {
+//         idx_state := dirty_check_req
+//       }
+//       idxCnt.inc()
+//     }
+//     is(idx_done) {
+//       idx_state := idx_idle
+//     }
+//   }
 
-  switch(offset_state) {
-    is(offset_idle) {
-      when(idx_state === dirty_true) {
-        offset_state := read_req
-      }
-    }
-    is(read_req) {
-      when(io.dataReadBus.req.fire()) {
-        offset_state := read_resp
-      }
-    }
-    is(read_resp) {
-      when(io.mem.req.fire()) {
-        offset_state := wb_ok
-      }
-    }
-    is(wb_ok) {
-      offset_state := offset_cntinc
-    }
-    is(offset_cntinc) {
-      when(offsetCnt.value === 7.U) {
-        offset_state := offset_done
-      }.elsewhen(offsetCnt.value =/= 7.U) {
-        offset_state := read_req
-      }
-      offsetCnt.inc()
-    }
-    is(offset_done) {
-      offset_state := offset_idle
-    }
-  }
-  //    BoringUtils.addSource(way_state === way_done, "DCache_done")
-  def MemValid(pc: UInt) = LookupTree(
-    wayCnt.value(1, 0),
-    List(
-      "b00".U -> "b0001".U,
-      "b01".U -> "b0010".U,
-      "b10".U -> "b0100".U,
-      "b11".U -> "b1000".U
-    )
-  )
+//   switch(offset_state) {
+//     is(offset_idle) {
+//       when(idx_state === dirty_true) {
+//         offset_state := read_req
+//       }
+//     }
+//     is(read_req) {
+//       when(io.dataReadBus.req.fire()) {
+//         offset_state := read_resp
+//       }
+//     }
+//     is(read_resp) {
+//       when(io.mem.req.fire()) {
+//         offset_state := wb_ok
+//       }
+//     }
+//     is(wb_ok) {
+//       offset_state := offset_cntinc
+//     }
+//     is(offset_cntinc) {
+//       when(offsetCnt.value === 7.U) {
+//         offset_state := offset_done
+//       }.elsewhen(offsetCnt.value =/= 7.U) {
+//         offset_state := read_req
+//       }
+//       offsetCnt.inc()
+//     }
+//     is(offset_done) {
+//       offset_state := offset_idle
+//     }
+//   }
+//   //    BoringUtils.addSource(way_state === way_done, "DCache_done")
+//   def MemValid(pc: UInt) = LookupTree(
+//     wayCnt.value(1, 0),
+//     List(
+//       "b00".U -> "b0001".U,
+//       "b01".U -> "b0010".U,
+//       "b10".U -> "b0100".U,
+//       "b11".U -> "b1000".U
+//     )
+//   )
 
-  io.metaReadBus.apply(
-    valid = idx_state === dirty_check_req,
-    setIdx = idxCnt.value
-  )
-  io.dataReadBus.apply(
-    valid = offset_state === read_req,
-    setIdx = Cat(idxCnt.value, offsetCnt.value)
-  )
-  io.metaWriteBus.apply(
-    valid = offset_state === offset_done,
-    data = Wire(new BankedMetaBundle).apply(
-      tag = Mux1H(MemValid(wayCnt.value), io.metaReadBus.resp.data).tag,
-      valid = true.B,
-      dirty = false.B
-    ),
-    setIdx = idxCnt.value,
-    waymask = MemValid(wayCnt.value)
-  )
-  io.mem.req.bits.apply(
-    addr = Cat(
-      (Mux1H(MemValid(wayCnt.value), io.metaReadBus.resp.data).tag),
-      idxCnt.value,
-      offsetCnt.value,
-      (0.U(3.W))
-    ),
-    cmd = SimpleBusCmd.write,
-    size = "b11".U,
-    wdata = Mux1H(MemValid(wayCnt.value), io.dataReadBus.resp.data).data,
-    wmask = Fill(DataBytes, 1.U)
-  )
-  io.mem.req.valid := (offset_state === read_resp)
-  io.mem.resp.ready := true.B
+//   io.metaReadBus.apply(
+//     valid = idx_state === dirty_check_req,
+//     setIdx = idxCnt.value
+//   )
+//   io.dataReadBus.apply(
+//     valid = offset_state === read_req,
+//     setIdx = Cat(idxCnt.value, offsetCnt.value)
+//   )
+//   io.metaWriteBus.apply(
+//     valid = offset_state === offset_done,
+//     data = Wire(new BankedMetaBundle).apply(
+//       tag = Mux1H(MemValid(wayCnt.value), io.metaReadBus.resp.data).tag,
+//       valid = true.B,
+//       dirty = false.B
+//     ),
+//     setIdx = idxCnt.value,
+//     waymask = MemValid(wayCnt.value)
+//   )
+//   io.mem.req.bits.apply(
+//     addr = Cat(
+//       (Mux1H(MemValid(wayCnt.value), io.metaReadBus.resp.data).tag),
+//       idxCnt.value,
+//       offsetCnt.value,
+//       (0.U(3.W))
+//     ),
+//     cmd = SimpleBusCmd.write,
+//     size = "b11".U,
+//     wdata = Mux1H(MemValid(wayCnt.value), io.dataReadBus.resp.data).data,
+//     wmask = Fill(DataBytes, 1.U)
+//   )
+//   io.mem.req.valid := (offset_state === read_resp)
+//   io.mem.resp.ready := true.B
 
-  //  val flush = WireInit(false.B)
-  //  BoringUtils.addSink(flush, "issueStall_flush")
-  //  when(flush) {
-  //    way_state := way_idle
-  //    idx_state := idx_idle
-  //    offset_state := offset_idle
-  //    wayCnt.reset()
-  //    idxCnt.reset()
-  //    offsetCnt.reset()
-  //  }
-}
+//   //  val flush = WireInit(false.B)
+//   //  BoringUtils.addSink(flush, "issueStall_flush")
+//   //  when(flush) {
+//   //    way_state := way_idle
+//   //    idx_state := idx_idle
+//   //    offset_state := offset_idle
+//   //    wayCnt.reset()
+//   //    idxCnt.reset()
+//   //    offsetCnt.reset()
+//   //  }
+// }
 class SSDCache(implicit val cacheConfig: BankedCacheConfig)
     extends BankedCacheModule
     with HasBankedCacheIO {
