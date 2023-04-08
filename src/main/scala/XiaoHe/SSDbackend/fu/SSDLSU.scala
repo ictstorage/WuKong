@@ -140,13 +140,18 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   val lsuPipeStage4 = Module(new stallPointConnect(new storePipeEntry)).suggestName("memStage4")
   //cache signal
   // storeCacheIn \ loadCacheIn --> cacheIn
-  val cacheIn = Wire(Vec(2, Decoupled(new SimpleBusReqBundle)))
-  val storeCacheIn = Wire(Vec(2, Flipped(Decoupled(new SimpleBusReqBundle))))
-  val loadCacheIn = Wire(Vec(2, Flipped(Decoupled(new SimpleBusReqBundle))))
+  val cacheIn = Wire(Decoupled(Vec(2, new SimpleBusReqBundle)))
+  val storeCacheIn = Wire(Decoupled(Vec(2, new SimpleBusReqBundle)))
+  val loadCacheIn = Wire(Decoupled(Vec(2, new SimpleBusReqBundle)))
 
 
-  io.dmem(0).req <> cacheIn(0)
-  io.dmem(1).req <> cacheIn(1)
+  io.dmem(0).req.bits <> cacheIn.bits(0)
+  io.dmem(0).req.valid := cacheIn.valid
+  cacheIn.ready := io.dmem(0).req.ready
+
+  io.dmem(1).req.bits <> cacheIn.bits(1)
+  io.dmem(1).req.valid := cacheIn.valid
+  cacheIn.ready := io.dmem(1).req.ready
   //store buffer
   val storeBuffer = Module(new StoreBuffer)
   //MMIO & OutBuffer
@@ -194,7 +199,7 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   lsuPipeIn(0).bits.size := size
   lsuPipeIn(0).bits.mask := reqWmask
   lsuPipeIn(0).bits.func := func(0)
-  lsuPipeIn(0).bits.isCacheStore := cacheIn(0).fire() && cacheIn(0).bits.cmd === SimpleBusCmd.write
+  lsuPipeIn(0).bits.isCacheStore := cacheIn.fire() && cacheIn.bits(0).cmd === SimpleBusCmd.write
   lsuPipeIn(0).bits.pc := pc
   lsuPipeIn(0).bits.isMMIOStore := isMMIOStore
   lsuPipeIn(0).bits.isMMIOStoreInvalid := isMMIOStore
@@ -215,7 +220,8 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   loadPipe0.io.storebuffer <> storeBuffer.io.snapshot
   loadPipe0.io.writePtr <> storeBuffer.io.writePtr
   loadPipe0.io.readPtr <> storeBuffer.io.readPtr
-  loadPipe0.io.dmem.req <> loadCacheIn(0)
+  loadPipe0.io.dmem.req.bits <> loadCacheIn.bits(0)
+  loadPipe0.io.dmem.req.ready <> loadCacheIn.ready
   loadPipe0.io.dmem.resp <> io.dmem(0).resp
   loadPipe0.io.invalid <> invalid(0)
   loadPipe0.io.stall := io.memStall
@@ -232,7 +238,8 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   loadPipe1.io.storebuffer <> storeBuffer.io.snapshot
   loadPipe1.io.writePtr <> storeBuffer.io.writePtr
   loadPipe1.io.readPtr <> storeBuffer.io.readPtr
-  loadPipe1.io.dmem.req <> loadCacheIn(1)
+  loadPipe1.io.dmem.req.bits <> loadCacheIn.bits(1)
+  loadPipe1.io.dmem.req.ready <> loadCacheIn.ready
   loadPipe1.io.dmem.resp <> io.dmem(1).resp
   loadPipe1.io.invalid <> invalid(0)
   loadPipe1.io.stall := io.memStall
@@ -266,14 +273,14 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   }
   //store buffer
   //load/store issue ctrl (issue to DCache)
-  storeCacheIn(0).bits.apply(
+  storeCacheIn.bits(0).apply(
     addr = storeBuffer.io.out.bits.paddr,
     size = storeBuffer.io.out.bits.size,
     wdata = storeBuffer.io.out.bits.data,
     wmask = storeBuffer.io.out.bits.mask,
     cmd = SimpleBusCmd.write
   )
-  storeCacheIn(1).bits.apply( //invalid
+  storeCacheIn.bits(1).apply( //invalid
     addr = 0.U,
     size = 0.U,
     wdata = 0.U,
@@ -281,22 +288,30 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
     cmd = 0.U
   )
 
-  storeCacheIn(0).valid := storeBuffer.io.out.valid
-  storeCacheIn(1).valid := false.B  //store dont allow two 
-  storeBuffer.io.out.ready := storeCacheIn(0).ready
+  storeCacheIn.valid := storeBuffer.io.out.valid
+  loadCacheIn.valid := io.in(0).valid
+  storeBuffer.io.out.ready := storeCacheIn.ready
 
+  val cacheInArbiter = Module(new Arbiter(Vec(2, new SimpleBusReqBundle),2))
+  val cacheInArbiter1 = Module(new Arbiter(Vec(2, new SimpleBusReqBundle),2))
 
-  // storeCacheIn(0).ready := Mux(storeBuffer.io.isAlmostFull || storeBuffer.io.isFull, true.B, false.B)
+  cacheInArbiter.io.in(0) <> loadCacheIn
+  cacheInArbiter.io.in(1) <> storeCacheIn
 
-  cacheIn(0) := Mux(storeBuffer.io.isAlmostFull || storeBuffer.io.isFull,storeCacheIn(0),loadCacheIn(0))
-  cacheIn(1) := Mux(storeBuffer.io.isAlmostFull || storeBuffer.io.isFull,storeCacheIn(1),loadCacheIn(1))
+  cacheInArbiter1.io.in(0) <> storeCacheIn
+  cacheInArbiter1.io.in(1) <> loadCacheIn
 
+  cacheInArbiter.io.out.ready := cacheIn.ready
+  cacheInArbiter1.io.out.ready := cacheIn.ready
+
+  cacheIn.bits :=  Mux(storeBuffer.io.isAlmostFull || storeBuffer.io.isFull,cacheInArbiter1.io.out.bits,cacheInArbiter.io.out.bits)
+  cacheIn.valid :=  Mux(storeBuffer.io.isAlmostFull || storeBuffer.io.isFull,cacheInArbiter1.io.out.valid,cacheInArbiter.io.out.valid)
   // cacheIn(0) := storeCacheIn(0)
   // cacheIn(1) := storeCacheIn(1)
 
 
-  io.in(0).ready := lsuPipeIn(0).ready || loadCacheIn(0).ready
-  io.in(1).ready := lsuPipeIn(0).ready || loadCacheIn(1).ready
+  io.in(0).ready := lsuPipeIn(0).ready || loadCacheIn.ready
+  io.in(1).ready := loadCacheIn.ready
 
   io.isMMIO := lsuPipeStage3.right.bits.isMMIO
   //store buffer snapshit

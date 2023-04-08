@@ -99,11 +99,11 @@ class SSDLoadPipe extends NutCoreModule with HasStoreBufferConst {
     val size = io.in.bits.func(1, 0)
     val s1Mask = genWmask(reqAddr, size)
 
-    io.dmem.req.bits.addr := reqAddr
-    io.dmem.req.bits.size := size
-    io.dmem.req.bits.wdata := 0.U
-    io.dmem.req.bits.wmask := 0.U
-    io.dmem.req.bits.cmd := SimpleBusCmd.read
+    // io.dmem.req.bits.addr := reqAddr
+    // io.dmem.req.bits.size := size
+    // io.dmem.req.bits.wdata := 0.U
+    // io.dmem.req.bits.wmask := 0.U
+    // io.dmem.req.bits.cmd := SimpleBusCmd.read
 
     val s2StoreValid = io.storePipeE3.valid
     val s3StoreValid = io.storePipeE4.valid

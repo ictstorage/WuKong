@@ -258,7 +258,7 @@ class SSDbackend extends NutCoreModule with hasBypassConst {
   val LSU = Module(new SSDLSU)
   io.dmem <> LSU.io.dmem
   LSU.io.out(0).ready := pipeIn(6).ready  //!(Redirect6.valid || Redirect7.valid)
-  LSU.io.out(0).ready := pipeIn(7).ready //!(Redirect6.valid || Redirect7.valid)
+  LSU.io.out(1).ready := pipeIn(7).ready //!(Redirect6.valid || Redirect7.valid)
   
   memStall := LSU.io.memStall
   LSU.io.storeBypassCtrl <> Bypass.io.LSUBypassCtrl.storeBypassCtrlE2

@@ -33,6 +33,8 @@ $(TOP_V): $(SCALA_FILE)
 
 deploy: build/top.zip
 
+jpz_test:
+	mill chiselModule.test.runMain top.CacheSim -td build --output-file cache.v BOARD=sim CORE=inorder 
 
 build/top.zip: $(TOP_V)
 	@zip -r $@ $< $<.conf build/*.anno.json

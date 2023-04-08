@@ -80,13 +80,13 @@ sealed trait BankedHasCacheConst {
   }
 
   def CacheMetaArrayReadBus() =
-    new SRAMReadBus(new BankedMetaBundle, set = Sets, way = Ways)
+    new BankedSRAMReadBus(new BankedMetaBundle, set = Sets, way = Ways)
   def CacheDataArrayReadBus() =
-    new SRAMReadBus(new BankedDataBundle, set = Sets * LineBeats, way = Ways)
+    new BankedSRAMReadBus(new BankedDataBundle, set = Sets * LineBeats, way = Ways)
   def CacheMetaArrayWriteBus() =
-    new SRAMWriteBus(new BankedMetaBundle, set = Sets, way = Ways)
+    new BankedSRAMWriteBus(new BankedMetaBundle, set = Sets, way = Ways)
   def CacheDataArrayWriteBus() =
-    new SRAMWriteBus(new BankedDataBundle, set = Sets * LineBeats, way = Ways)
+    new BankedSRAMWriteBus(new BankedDataBundle, set = Sets * LineBeats, way = Ways)
 
   def getMetaIdx(addr: UInt) = addr.asTypeOf(addrBundle).index
   def getDataIdx(addr: UInt) = Cat(
@@ -246,8 +246,8 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
 
   val io = IO(new BankedCacheStage2IO)
 
-  val metaWriteArb = Module(new Arbiter(CacheMetaArrayWriteBus().req.bits, 3))
-  val dataWriteArb = Module(new Arbiter(CacheDataArrayWriteBus().req.bits, 3))
+  val metaWriteArb = Module(new Arbiter(CacheMetaArrayWriteBus().req.bits, 2))
+  val dataWriteArb = Module(new Arbiter(CacheDataArrayWriteBus().req.bits, 2))
 
   val victimWaymask = 8.U // Set 3 as default
   val metaWay = Wire(Vec(2, Vec(Ways, new BankMetaBundle_tmp)))
@@ -564,11 +564,17 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
     true.B,
     state === s_wait_resp
   )
+  io.out(1).valid := io.in(1).valid && Mux(
+    hit(1),  //
+    true.B,
+    state === s_wait_resp
+  )
   val inRdataRegDemand = RegEnable(
     Mux(mmio(0), io.mmio.resp.bits.rdata, io.mem.resp.bits.rdata),
     Mux(mmio(0), state === s_mmioResp, readingFirst)
   )
   io.out(0).bits.rdata := Mux(hit(0), dataRead(0), inRdataRegDemand)
+  io.out(1).bits.rdata := Mux(hit(1), dataRead(1), inRdataRegDemand)
 
   io.out(0).bits.cmd := Mux(
     io.in(0).bits.req.isRead(),
@@ -576,12 +582,20 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
     Mux(io.in(0).bits.req.isWrite(), SimpleBusCmd.writeResp, DontCare)
   ) // DontCare, added by lemover
 
+  io.out(1).bits.cmd := Mux(
+    io.in(1).bits.req.isRead(),
+    SimpleBusCmd.readLast,
+    Mux(io.in(1).bits.req.isWrite(), SimpleBusCmd.writeResp, DontCare)
+  ) // DontCare, added by lemover
+
+
   // With critical-word first, the pipeline registers between
   // s2 and s3 can not be overwritten before a missing request
   // is totally handled. We use io.isFinish to indicate when the
   // request really ends.
 
   io.in(0).ready := io.out(0).ready && state === s_idle && !miss(0)
+  io.in(1).ready := io.out(1).ready && state === s_idle && !miss(0)
 
   // stall when read req in s2 cant be responed or read req in s1 cant be send to s2( s1.in.ready === false.B)
   //    val cacheStall = WireInit(false.B)
@@ -785,9 +799,9 @@ class SSDCache(implicit val cacheConfig: BankedCacheConfig)
     val s1 = Module(new BankedCacheStage1)
     val s2 = Module(new BankedCacheStage2)
     val metaArray = Module(
-      new MetaSRAMTemplateWithArbiter(
-        nRead = 2,
-        nWrite = 2,
+      new BankedMetaSRAMTemplateWithArbiter(
+        nRead = 1,
+        nWrite = 1,
         new BankedMetaBundle,
         set = Sets,
         way = Ways,
@@ -796,7 +810,7 @@ class SSDCache(implicit val cacheConfig: BankedCacheConfig)
     )
     val dataArray = Module(
       new BankedDataArrayWithArbiter(
-        nRead = 3,
+        nRead = 2,
         new BankedDataBundle,
         set = Sets * LineBeats,
         way = Ways
@@ -807,17 +821,18 @@ class SSDCache(implicit val cacheConfig: BankedCacheConfig)
     dataArray.io.r(1) <> s2.io.dataReadBus
     // dataArray.io.r(2) <> flushDCache.io.dataReadBus
 
+    dataArray.io.w <> s2.io.dataWriteBus
 
     metaArray.io.r(0) <> s1.io.metaReadBus
     // metaArray.io.r(1) <> flushDCache.io.metaReadBus
 
     metaArray.io.w(0) <> s2.io.metaWriteBus
     // metaArray.io.w(1) <> flushDCache.io.metaWriteBus
+    
 
-
-    val Xbar = Module(new SimpleBusCrossbarNto1(2))
+    val Xbar = Module(new SimpleBusCrossbarNto1(1))
     // Xbar.io.in(0) <> flushDCache.io.mem
-    Xbar.io.in(1) <> s2.io.mem
+    Xbar.io.in(0) <> s2.io.mem
 
     s1.io.in(0) <> io.in(0).req
     s1.io.in(1) <> io.in(1).req
@@ -833,7 +848,6 @@ class SSDCache(implicit val cacheConfig: BankedCacheConfig)
     io.mmio <> s2.io.mmio
 
 
-    dataArray.io.w <> s2.io.dataWriteBus
 
     s2.io.metaReadResp(0) := s1.io.metaReadBus(0).resp.data
     s2.io.dataReadResp(0) := s1.io.dataReadBus(0).resp.data

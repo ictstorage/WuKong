@@ -162,7 +162,7 @@ object XiaoHeSim extends App{
 object CacheSim extends App{
   lazy val config = NutCoreConfig(FPGAPlatform = false)
   (new chisel3.stage.ChiselStage).execute(args, Seq(
-    chisel3.stage.ChiselGeneratorAnnotation(() =>new BankedCacheStage2()(BankedCacheConfig(ro = true)))
+    chisel3.stage.ChiselGeneratorAnnotation(() =>new SSDCache()(BankedCacheConfig(ro = true)))
   ))
 }
 
