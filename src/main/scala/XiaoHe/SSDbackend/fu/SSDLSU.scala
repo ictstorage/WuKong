@@ -79,12 +79,13 @@ class storePipeEntry extends StoreBufferEntry{
 
 class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   val io = IO(new SSDLSUIO)
-  val (valid, src1, src2, func, invalid, offset) = (VecInit(io.in(1).valid,io.in(0).valid),
-    VecInit(io.in(1).bits.src1, io.in(0).bits.src1),
-    VecInit(io.in(1).bits.src2, io.in(0).bits.src2),
-    VecInit(io.in(1).bits.func, io.in(0).bits.func),
+  val (valid, src1, src2, func, invalid, offset) = (
+    VecInit(io.in(0).valid,io.in(1).valid),
+    VecInit(io.in(0).bits.src1, io.in(1).bits.src1),
+    VecInit(io.in(0).bits.src2, io.in(1).bits.src2),
+    VecInit(io.in(0).bits.func, io.in(1).bits.func),
     io.invalid,
-    VecInit(io.in(1).bits.offset, io.in(0).bits.offset))
+    VecInit(io.in(0).bits.offset, io.in(1).bits.offset))
 //  def access(valid: Vec[Bool] , src1: Vec[UInt], src2: Vec[UInt], func: Vec[UInt], offset: Vec[UInt]): UInt = {
 //    this.valid := valid
 //    this.src1 := src1
@@ -181,7 +182,7 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
 
   //stall signal
   val cacheStall = WireInit(false.B)
-  // BoringUtils.addSink(cacheStall,"cacheStall")
+  BoringUtils.addSink(cacheStall,"cacheStall")
   val  bufferFullStall = (storeBuffer.io.isAlmostFull && lsuPipeOut(1).bits.isStore && lsuPipeOut(1).valid) || storeBuffer.io.isFull  //when almost full, still can store one
   BoringUtils.addSource(bufferFullStall,"bufferFullStall")
   
@@ -310,8 +311,6 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
 
   cacheIn.bits :=  Mux(storeBuffer.io.isAlmostFull || storeBuffer.io.isFull,cacheInArbiter1.io.out.bits,cacheInArbiter.io.out.bits)
   cacheIn.valid :=  Mux(storeBuffer.io.isAlmostFull || storeBuffer.io.isFull,cacheInArbiter1.io.out.valid,cacheInArbiter.io.out.valid)
-  // cacheIn(0) := storeCacheIn(0)
-  // cacheIn(1) := storeCacheIn(1)
 
 
   io.in(0).ready := lsuPipeIn(0).ready || loadCacheIn.ready

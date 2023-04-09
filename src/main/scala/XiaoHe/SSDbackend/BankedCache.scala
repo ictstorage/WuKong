@@ -212,7 +212,7 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
   val s1NotReady =
     (!io.metaReadBus(0).req.ready || !io.metaReadBus(1).req.ready ||
       !io.dataReadBus(0).req.ready || !io.dataReadBus(1).req.ready) && (io.in(0).valid && io.in(1).valid)
-  //    BoringUtils.addSource(s1NotReady, "s1NotReady")
+  BoringUtils.addSource(s1NotReady, "s1NotReady")
 
   io.out(0).bits.req := io.in(0).bits
   io.out(1).bits.req := io.in(1).bits
@@ -837,9 +837,10 @@ class SSDCache(implicit val cacheConfig: BankedCacheConfig)
     s1.io.in(0) <> io.in(0).req
     s1.io.in(1) <> io.in(1).req
 
-    // PipelineConnect(s1.io.out, s2.io.in, s2.io.out.fire(), io.flush)
+    PipelineConnect(s1.io.out(0), s2.io.in(0), s2.io.out(0).fire(), io.flush)
+    PipelineConnect(s1.io.out(1), s2.io.in(1), s2.io.out(1).fire(), io.flush)
 
-    PipelineVector2Connect(new BankedStage1Out, s1.io.out(0), s1.io.out(1), s2.io.in(0), s2.io.in(1),io.flush,64)
+    // PipelineVector2Connect(new BankedStage1Out, s1.io.out(0), s1.io.out(1), s2.io.in(0), s2.io.in(1),io.flush,64)
     io.in(0).resp <> s2.io.out(0)
     io.in(1).resp <> s2.io.out(1)
     s2.io.flush := io.flush
