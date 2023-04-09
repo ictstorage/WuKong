@@ -19,7 +19,7 @@ package top
 import XiaoHe.NutCoreConfig
 import bus.axi4.ysyxAXI4IO
 import system.XiaoHe
-import _root_.XiaoHe.SSDbackend.{BankedCacheConfig, BankedCacheStage1, BankedCacheStage2, SSDCache, SSDCacheConfig, SSDCacheTest}
+import _root_.XiaoHe.SSDbackend.{BankedCacheConfig, BankedCacheStage1, BankedCacheStage2, SSDCache, SSDCacheConfig}
 import device.AXI4VGA
 import sim.SimTop
 import chisel3._
@@ -27,6 +27,10 @@ import chisel3.stage._
 import top.XiaoHeSim.args
 import top.ysyx.args
 import utils.BankedDataArray
+import XiaoHe.SSDbackend.backend.SSDbackend
+import XiaoHe.NutCore
+import _root_.XiaoHe.SSDbackend.fu.SSDLSU
+import _root_.XiaoHe.SSDbackend.fu.ALU
 class riscv_cpu_io extends Bundle {
   val master = new ysyxAXI4IO()
   val slave  = Flipped(new ysyxAXI4IO())
@@ -162,7 +166,8 @@ object XiaoHeSim extends App{
 object CacheSim extends App{
   lazy val config = NutCoreConfig(FPGAPlatform = false)
   (new chisel3.stage.ChiselStage).execute(args, Seq(
-    chisel3.stage.ChiselGeneratorAnnotation(() =>new SSDCache()(BankedCacheConfig(ro = true)))
+    // chisel3.stage.ChiselGeneratorAnnotation(() =>new SSDCache()(BankedCacheConfig(ro = true)))
+    chisel3.stage.ChiselGeneratorAnnotation(() =>new SSDLSU())
   ))
 }
 

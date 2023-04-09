@@ -156,7 +156,7 @@ class BankedCacheIO(implicit val cacheConfig: BankedCacheConfig)
   extends Bundle
     with HasNutCoreParameter
     with BankedHasCacheConst {
-  val in = Flipped(Vec(2, new SimpleBusUC(userBits = userBits, idBits = idBits)))
+  val in = Vec(2, Flipped(new SimpleBusUC(userBits = userBits, idBits = idBits)))
   val flush = Input(Bool())
   val out = new SimpleBusC
   val mmio = new SimpleBusUC
@@ -416,11 +416,11 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   val MMIOStorePkt = Wire(Flipped(Decoupled(new StoreBufferEntry)))
   MMIOStorePkt.valid := false.B
   MMIOStorePkt.bits := 0.U.asTypeOf(new StoreBufferEntry)
-  //    BoringUtils.addSink(mmioStorePending, "MMIOStorePending")
-  //    BoringUtils.addSink(outBufferValid, "MMIOStorePktValid")
-  //    BoringUtils.addSink(MMIOStorePkt.bits, "MMIOStorePktBits")
-  //    BoringUtils.addSource(MMIOStorePkt.ready, "MMIOStorePktReady")
-  //    BoringUtils.addSink(outBufferFire, "outBufferFire")
+     BoringUtils.addSink(mmioStorePending, "MMIOStorePending")
+     BoringUtils.addSink(outBufferValid, "MMIOStorePktValid")
+     BoringUtils.addSink(MMIOStorePkt.bits, "MMIOStorePktBits")
+     BoringUtils.addSource(MMIOStorePkt.ready, "MMIOStorePktReady")
+     BoringUtils.addSink(outBufferFire, "outBufferFire")
   MMIOStorePkt.valid := outBufferValid && (state === s_mmioReq)
   val mmioStoreReq = Wire(
     Flipped(
@@ -598,15 +598,15 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   io.in(1).ready := io.out(1).ready && state === s_idle && !miss(0)
 
   // stall when read req in s2 cant be responed or read req in s1 cant be send to s2( s1.in.ready === false.B)
-  //    val cacheStall = WireInit(false.B)
-  //    val s1NotReady = WireInit(false.B)
-  //    BoringUtils.addSource(cacheStall, "cacheStall")
-  //    BoringUtils.addSink(s1NotReady, "s1NotReady")
-  //    cacheStall := miss || state =/= s_idle || s1NotReady
-  //    BoringUtils.addSource(miss, "dcacheMissCycle")
-  //    BoringUtils.addSource((miss & (!RegNext(miss))), "dcacheMissCnt")
-  //    BoringUtils.addSource(s1NotReady & (!RegNext(s1NotReady)), "s1NotReadyCnt")
-  //    BoringUtils.addSource(cacheStall & (!RegNext(cacheStall)), "cacheStallCnt")
+     val cacheStall = WireInit(false.B)
+     val s1NotReady = WireInit(false.B)
+     BoringUtils.addSource(cacheStall, "cacheStall")
+     BoringUtils.addSink(s1NotReady, "s1NotReady")
+     cacheStall := miss(0) || state =/= s_idle || s1NotReady
+     BoringUtils.addSource(miss(0), "dcacheMissCycle")
+     BoringUtils.addSource((miss(0) & (!RegNext(miss(0)))), "dcacheMissCnt")
+     BoringUtils.addSource(s1NotReady & (!RegNext(s1NotReady)), "s1NotReadyCnt")
+     BoringUtils.addSource(cacheStall & (!RegNext(cacheStall)), "cacheStallCnt")
 
 }
 

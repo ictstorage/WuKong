@@ -66,7 +66,7 @@ class SSDMOU extends NutCoreModule{
   val flushICache = (state1 === flush_icache)
   BoringUtils.addSource(flushICache, "MOUFlushICache")
   val flushDCache = (state1 === flush_dcache)
-  BoringUtils.addSource(flushDCache, "MOUFlushDCache")
+  // BoringUtils.addSource(flushDCache, "MOUFlushDCache")
 
   io.out.bits := 0.U
   io.in.ready := state1 === s1_idle

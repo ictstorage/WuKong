@@ -85,7 +85,7 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
     VecInit(io.in(1).bits.func, io.in(0).bits.func),
     io.invalid,
     VecInit(io.in(1).bits.offset, io.in(0).bits.offset))
-//  def access(valid: Bool, src1: UInt, src2: UInt, func: UInt, offset: UInt): UInt = {
+//  def access(valid: Vec[Bool] , src1: Vec[UInt], src2: Vec[UInt], func: Vec[UInt], offset: Vec[UInt]): UInt = {
 //    this.valid := valid
 //    this.src1 := src1
 //    this.src2 := src2
@@ -123,8 +123,10 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   val reqWdata = genWdata(wdata, size)
   val reqWmask = genWmask(addr, size)
 
-  val loadPipe0 = Module(new SSDLoadPipe)
-  val loadPipe1 = Module(new SSDLoadPipe)
+  val name0 = "load0"
+  val name1 = "load1"
+  val loadPipe0 = Module(new SSDLoadPipe()(name0))
+  val loadPipe1 = Module(new SSDLoadPipe()(name1))
   //store pipeline
   /*
   ||----------EX2------------||
@@ -179,15 +181,18 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
 
   //stall signal
   val cacheStall = WireInit(false.B)
-  BoringUtils.addSink(cacheStall,"cacheStall")
+  // BoringUtils.addSink(cacheStall,"cacheStall")
   val  bufferFullStall = (storeBuffer.io.isAlmostFull && lsuPipeOut(1).bits.isStore && lsuPipeOut(1).valid) || storeBuffer.io.isFull  //when almost full, still can store one
   BoringUtils.addSource(bufferFullStall,"bufferFullStall")
   
   val pc = WireInit(0.U(VAddrBits.W))  //for LSU debug
   BoringUtils.addSink(pc,"lsuPC")  
-  val loads2valid = WireInit(false.B)
-  BoringUtils.addSink(loads2valid, "loads2valid")  
-  io.memStall := cacheStall && (i0isLoad || i1isLoad || loads2valid) || bufferFullStall
+  val loads2valid0 = WireInit(false.B)
+  val loads2valid1 = WireInit(false.B)
+  loads2valid0 := loadPipe0.io.loadS2Valid
+  loads2valid1 := loadPipe1.io.loadS2Valid
+  
+  io.memStall := cacheStall && (i0isLoad || i1isLoad || loads2valid0) || bufferFullStall
 
   lsuPipeIn(0).valid := i0isStore  
   lsuPipeIn(0).bits.isStore := i0isStore
@@ -221,7 +226,7 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   loadPipe0.io.writePtr <> storeBuffer.io.writePtr
   loadPipe0.io.readPtr <> storeBuffer.io.readPtr
   loadPipe0.io.dmem.req.bits <> loadCacheIn.bits(0)
-  loadPipe0.io.dmem.req.ready <> loadCacheIn.ready
+  loadPipe0.io.dmem.req.ready := loadCacheIn.ready
   loadPipe0.io.dmem.resp <> io.dmem(0).resp
   loadPipe0.io.invalid <> invalid(0)
   loadPipe0.io.stall := io.memStall
@@ -239,7 +244,7 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   loadPipe1.io.writePtr <> storeBuffer.io.writePtr
   loadPipe1.io.readPtr <> storeBuffer.io.readPtr
   loadPipe1.io.dmem.req.bits <> loadCacheIn.bits(1)
-  loadPipe1.io.dmem.req.ready <> loadCacheIn.ready
+  loadPipe1.io.dmem.req.ready := loadCacheIn.ready
   loadPipe1.io.dmem.resp <> io.dmem(1).resp
   loadPipe1.io.invalid <> invalid(0)
   loadPipe1.io.stall := io.memStall
@@ -247,7 +252,6 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
 
   io.out(0) <> loadPipe0.io.out
   io.out(1) <> loadPipe1.io.out
-
 
   for(i <- 1 to 1){
     lsuPipeIn(i).bits := lsuPipeOut(i-1).bits

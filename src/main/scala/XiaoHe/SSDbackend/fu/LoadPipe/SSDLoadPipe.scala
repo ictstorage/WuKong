@@ -37,8 +37,8 @@ class SSDLoadPipeIO extends NutCoreBundle with HasStoreBufferConst {
     }))
     val out = Decoupled(Output(UInt(XLEN.W)))
     // store pipe forward check
-    val storePipeE3 = Flipped(DecoupledIO(new storePipeEntry))
-    val storePipeE4 = Flipped(DecoupledIO(new storePipeEntry))
+    val storePipeE3 = Flipped(Decoupled(new storePipeEntry))
+    val storePipeE4 = Flipped(Decoupled(new storePipeEntry))
     // storebuffer forward check
     val storebuffer = Flipped(Vec(StoreBufferSize, new StoreBufferEntry))
     val writePtr = Input(UInt((log2Up(StoreBufferSize) + 1).W))
@@ -52,9 +52,11 @@ class SSDLoadPipeIO extends NutCoreBundle with HasStoreBufferConst {
     val stall = Input(Bool())
     // debug
     val pc = Input(UInt(VAddrBits.W))
+    //s2 valid
+    val loadS2Valid = Output(Bool())
 
 }
-class SSDLoadPipe extends NutCoreModule with HasStoreBufferConst {
+class SSDLoadPipe (implicit val lname:String)extends NutCoreModule with HasStoreBufferConst {
     def hitCheck(
         headAddr: UInt,
         tailAddr: UInt,
@@ -230,7 +232,10 @@ class SSDLoadPipe extends NutCoreModule with HasStoreBufferConst {
     io.dmem.req.valid := io.in.valid
     io.dmem.resp.ready := true.B
 
-    BoringUtils.addSource(loadS2.valid,"loads2valid")
+    // val fname = if (lname.equals("load0")) "loads2valid0" else "loads2valid1"
+    // BoringUtils.addSource(loadS2.valid,fname)
+    // print(fname)
+    io.loadS2Valid := loadS2.valid
     val addrS2 = loadS2.bits.paddr
     val rdataSel = LookupTree(
       addrS2(2, 0),
