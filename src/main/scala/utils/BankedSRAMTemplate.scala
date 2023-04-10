@@ -399,8 +399,8 @@ class BankedDataArrayWithArbiter[T <: Data](nRead: Int, gen: T, set: Int, way: I
 
   // val readArb = Module(new Arbiter(chiselTypeOf(io.r(0).req.bits), 2))
   // readArb.io.in <> VecInit(io.r(1).req,io.r(0).req)
-  val valid0 =  io.r(0)(0).req.valid
-  val valid1 =  io.r(1)(0).req.valid
+  val valid0 =  io.r(0)(0).req.valid || io.r(0)(1).req.valid 
+  val valid1 =  io.r(1)(0).req.valid || io.r(1)(1).req.valid 
 
   val req00 = io.r(0)(0).req.bits
   val req01 = io.r(0)(1).req.bits
