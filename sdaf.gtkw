@@ -1,15 +1,15 @@
 [*]
 [*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Tue Apr 11 09:24:10 2023
+[*] Tue Apr 11 10:14:24 2023
 [*]
-[dumpfile] "/home/oslab/xs-env/NutShell/build/2023-04-11@17:20:08.vcd"
-[dumpfile_mtime] "Tue Apr 11 09:20:08 2023"
-[dumpfile_size] 5623550
+[dumpfile] "/home/oslab/xs-env/NutShell/build/2023-04-11@18:05:39.vcd"
+[dumpfile_mtime] "Tue Apr 11 10:05:40 2023"
+[dumpfile_size] 4118403
 [savefile] "/home/oslab/xs-env/NutShell/sdaf.gtkw"
-[timestart] 172
-[size] 1420 657
-[pos] 136 167
-*-2.938303 190 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[timestart] 0
+[size] 1814 829
+[pos] 40 322
+*-4.960330 20 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.SimTop.
 [treeopen] TOP.SimTop.xiaohe.
@@ -22,7 +22,7 @@
 [sst_width] 319
 [signals_width] 385
 [sst_expanded] 1
-[sst_vpaned_height] 346
+[sst_vpaned_height] 472
 @22
 TOP.SimTop.xiaohe.nutcore.SSDbackend.pipeStage2.io_right_bits_pc[38:0]
 TOP.SimTop.xiaohe.nutcore.SSDbackend.pipeStage3.io_right_bits_pc[38:0]
@@ -40,9 +40,17 @@ TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.i1isLoad
 TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.loadPipe1.reqAddr[63:0]
 @200
 -
+@28
+TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.i0isStore
+@22
+TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.addr[63:0]
+TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.io_in_1_bits_src1[63:0]
+TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.io_in_1_bits_offset[63:0]
+@200
+-
 @22
 TOP.SimTop.xiaohe.nutcore.SSDCache.s2.state[3:0]
-@201
+@200
 -
 [pattern_trace] 1
 [pattern_trace] 0

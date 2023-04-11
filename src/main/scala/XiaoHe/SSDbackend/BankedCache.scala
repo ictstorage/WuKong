@@ -256,6 +256,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   val hitVec  = Wire(Vec(2, UInt(4.W)))
   val hit     = Wire(Vec(2, Bool()))
   val miss    = Wire(Vec(2, Bool()))
+  dontTouch(miss)
 
   val mmio          = Wire(Vec(2, Bool()))
   val invalidVec    = Wire(Vec(2, UInt(4.W)))

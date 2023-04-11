@@ -111,18 +111,21 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
     ))
   }
 
-  val addr = src1(0) + offset(0)
-  val wdata = src2(0)
-  val size = func(0)(1,0)
-
+  
   val i0isLoad  = valid(0) && LSUOpType.isLoad(func(0))
   val i0isStore = valid(0) && LSUOpType.isStore(func(0))
   val i1isLoad  = valid(1) && LSUOpType.isLoad(func(1))
   val i1isStore = valid(1) && LSUOpType.isStore(func(1))
 
-  val reqAddr  = addr
-  val reqWdata = genWdata(wdata, size)
-  val reqWmask = genWmask(addr, size)
+  val wdata = Mux(i0isStore,src2(0),src2(1))
+  val size = Mux(i0isStore,func(0)(1,0),func(1)(1,0))
+  val storeOffset = Mux(i0isStore, offset(0),offset(1))
+  val storeSrc1 = Mux(i0isStore, src1(0),src1(1))
+  val storeFunc = Mux(i0isStore, func(0),func(1))
+  
+  val storeReqAddr  = Mux(i0isStore,src1(0) + offset(0),src1(1) + offset(1))
+  val storeReqWdata = genWdata(wdata, size)
+  val storeReqWmask = genWmask(storeReqAddr, size)
 
   val name0 = "load0"
   val name1 = "load1"
@@ -160,8 +163,8 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   //MMIO & OutBuffer
   val outBuffer = Module(new Queue(new StoreBufferEntry, entries = 1))
   val MMIOStorePkt = Wire(Decoupled(new StoreBufferEntry))
-  val isMMIOStore = AddressSpace.isMMIO(addr) && i0isStore
-  val isMMIO = AddressSpace.isMMIO(addr)
+  val isMMIOStore = AddressSpace.isMMIO(storeReqAddr) && i0isStore
+  val isMMIO = AddressSpace.isMMIO(storeReqAddr)
   val MMIOStorePending = (lsuPipeStage4.right.valid && lsuPipeStage4.right.bits.isMMIOStore) || outBuffer.io.deq.valid
 
   outBuffer.io.enq.valid := lsuPipeStage4.right.valid && lsuPipeStage4.right.bits.isMMIOStore && !invalid(2)
@@ -195,16 +198,16 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   
   io.memStall := cacheStall && (i0isLoad || i1isLoad || loads2valid0) || bufferFullStall
 
-  lsuPipeIn(0).valid := i0isStore  
-  lsuPipeIn(0).bits.isStore := i0isStore
-  lsuPipeIn(0).bits.paddr := reqAddr(PAddrBits-1,0)
-  lsuPipeIn(0).bits.offset := offset(0)
-  lsuPipeIn(0).bits.rs1 := src1(0)
+  lsuPipeIn(0).valid := i0isStore || i1isStore
+  lsuPipeIn(0).bits.isStore := i0isStore || i1isStore
+  lsuPipeIn(0).bits.paddr := storeReqAddr(PAddrBits-1,0)
+  lsuPipeIn(0).bits.offset := storeOffset
+  lsuPipeIn(0).bits.rs1 := storeSrc1
   lsuPipeIn(0).bits.mergeAddr := i0isStore && io.storeBypassCtrl.asUInt.orR
-  lsuPipeIn(0).bits.data := reqWdata
+  lsuPipeIn(0).bits.data := storeReqWdata
   lsuPipeIn(0).bits.size := size
-  lsuPipeIn(0).bits.mask := reqWmask
-  lsuPipeIn(0).bits.func := func(0)
+  lsuPipeIn(0).bits.mask := storeReqWmask
+  lsuPipeIn(0).bits.func := storeFunc
   lsuPipeIn(0).bits.isCacheStore := cacheIn.fire() && cacheIn.bits(0).cmd === SimpleBusCmd.write
   lsuPipeIn(0).bits.pc := pc
   lsuPipeIn(0).bits.isMMIOStore := isMMIOStore
@@ -261,12 +264,10 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   }
 
   //store pipeline Rs bypass 
-  val storeAddr = reqAddr
-  val storeMask = reqWmask
   val bypassEnaE2 = io.storeBypassCtrl.asUInt.orR && lsuPipeIn(0).bits.isStore
   val bypassDataE2 = PriorityMux(io.storeBypassCtrl,io.storeBypassPort)
   val bypassWdata = genWdata(bypassDataE2,lsuPipeIn(0).bits.func(1,0))
-  lsuPipeIn(0).bits.data := Mux(bypassEnaE2,bypassWdata,reqWdata)
+  lsuPipeIn(0).bits.data := Mux(bypassEnaE2,bypassWdata,storeReqWdata)
 
   val lsuPipeList0 = List(lsuPipeStage3,lsuPipeStage4)
   val pipeIndexList0 = List(0,1)
