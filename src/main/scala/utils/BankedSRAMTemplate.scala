@@ -318,8 +318,12 @@ class BankedDataArray(implicit val p: BankedCacheConfig) extends AbstractBankedD
   val set_addrs = Wire(Vec(LoadPipelineWidth, UInt()))
   val bank_addrs = Wire(Vec(LoadPipelineWidth, UInt()))
   (0 until LoadPipelineWidth).map(rport_index => {
-    set_addrs(rport_index) := addr_to_dcache_set(io.read(rport_index).bits.addr)
-    bank_addrs(rport_index) := addr_to_dcache_bank(io.read(rport_index).bits.addr)
+    // set_addrs(rport_index) := addr_to_dcache_set(io.read(rport_index).bits.addr)
+    // bank_addrs(rport_index) := addr_to_dcache_bank(io.read(rport_index).bits.addr)
+    set_addrs(rport_index) := io.read(rport_index).bits.addr(8,3)
+    bank_addrs(rport_index) := io.read(rport_index).bits.addr(2,0)
+
+    
 
     io.read(rport_index).ready := true.B
 
@@ -359,21 +363,24 @@ class BankedDataArray(implicit val p: BankedCacheConfig) extends AbstractBankedD
 
   }
 
-  val two_bank_result = VecInit(bank_result(bank_addrs(1)),bank_result(bank_addrs(0)))
+  val two_bank_result = VecInit(bank_result(RegNext(bank_addrs(0))),bank_result(RegNext(bank_addrs(1))))
   // read result: expose banked read result
   io.resp := two_bank_result
 
 
 
   // write data_banks & ecc_banks
-  val sram_waddr = addr_to_dcache_set(io.write.bits.addr)
+  val sram_waddr = io.write.bits.addr(8,3)
+  val sram_waddr_bank = io.write.bits.addr(2,0)
   for (bank_index <- 0 until DCacheBanks) {
     // data write
     val data_bank = data_banks(bank_index)
-    data_bank.io.w.en := io.write.valid && io.write.bits.wmask(bank_index)
+    // data_bank.io.w.en := io.write.valid && io.write.bits.wmask(bank_index)
+    data_bank.io.w.en := io.write.valid && (bank_index.U === sram_waddr_bank)
+
     data_bank.io.w.way_en := io.write.bits.way_en
     data_bank.io.w.addr := sram_waddr
-    data_bank.io.w.data := io.write.bits.data(bank_index)
+    data_bank.io.w.data := io.write.bits.data
 
   }
 
@@ -408,11 +415,14 @@ class BankedDataArrayWithArbiter[T <: Data](nRead: Int, gen: T, set: Int, way: I
   val req11 = io.r(1)(1).req.bits
 
   val ramIn = Wire(Vec(2, chiselTypeOf(io.r(0)(0).req.bits)))
+  val ramInvalid = Wire(Vec(2, Bool()))
+  ramIn := Mux(valid0, VecInit(req00,req01 ), VecInit(req10,req11 ))
+  ramInvalid := Mux(valid0, VecInit(io.r(0)(0).req.valid,io.r(0)(1).req.valid), VecInit(io.r(1)(0).req.valid,io.r(1)(1).req.valid)) 
 
-  ramIn := Mux(valid0, VecInit(req01, req00), VecInit(req11, req10))
+
   ram.io.read(0).bits.way_en := "b1111".U //?haha
   ram.io.read(0).bits.addr := ramIn(0).setIdx
-  ram.io.read(0).valid := valid0
+  ram.io.read(0).valid := ramInvalid(0)
 
   io.r(0)(0).req.ready := ram.io.read(0).ready
   io.r(0)(1).req.ready := ram.io.read(1).ready
@@ -431,7 +441,7 @@ class BankedDataArrayWithArbiter[T <: Data](nRead: Int, gen: T, set: Int, way: I
 
   ram.io.read(1).bits.way_en := "b1111".U //?haha
   ram.io.read(1).bits.addr := ramIn(1).setIdx
-  ram.io.read(1).valid := valid0
+  ram.io.read(1).valid := ramInvalid(1)
 
     // latch read results
   io.r.map{ case r => {
@@ -498,19 +508,25 @@ class BankedMetaSRAMTemplate[T <: Data](gen: T, set: Int, way: Int = 1,
   val (ren0, wen) = (io.r(0).req.valid, io.w.req.valid || resetState)
   val ren1 = io.r(1).req.valid
 
-  val realRen = (if (singlePort) ren0 && !wen else ren0)
+  val realRen = (if (singlePort) (ren0 || ren1) && !wen else ren0)
 
   val setIdx = Mux(resetState, resetSet, io.w.req.bits.setIdx)
   val wdataword = Mux(resetState, 0.U.asTypeOf(wordType), io.w.req.bits.data.asUInt)
   val waymask = Mux(resetState, Fill(way, "b1".U), io.w.req.bits.waymask.getOrElse("b1".U))
-  val wdata = VecInit(Seq.fill(way)(Cat(0.U((128/way-gen.getWidth).W), wdataword)))
+  // val wdata = VecInit(Seq.fill(way)(Cat(0.U((128/way-gen.getWidth).W), wdataword)))
+  val wdata = Cat(0.U(128 - 4*gen.getWidth), wdataword)
   // when (wen) { array.write(setIdx, wdata, waymask.asBools) }
 
   sram.CLK := clock
   sram.A := Mux(wen, setIdx, io.r(0).req.bits.setIdx)
   sram.CEN := ~(wen || realRen)
   sram.WEN := ~wen
-  sram.BWEN := ~FillInterleaved(128/way, waymask)
+  sram.BWEN := ~Cat(0.U((128 - 4*gen.getWidth).W), 
+  VecInit(Seq.fill(gen.getWidth)(waymask(3))).asUInt,
+  VecInit(Seq.fill(gen.getWidth)(waymask(2))).asUInt,
+  VecInit(Seq.fill(gen.getWidth)(waymask(1))).asUInt,
+  VecInit(Seq.fill(gen.getWidth)(waymask(0))).asUInt
+  )
   sram.D := Cat(wdata)
 
   sram.A1 :=  io.r(1).req.bits.setIdx
@@ -520,8 +536,8 @@ class BankedMetaSRAMTemplate[T <: Data](gen: T, set: Int, way: Int = 1,
   // sram.D := Cat(wdata)
 
 
-  val rdata0 = sram.Q.asTypeOf(Vec(way, UInt((128/way).W))).map(_.asTypeOf(gen))
-  val rdata1 = sram.Q1.asTypeOf(Vec(way, UInt((128/way).W))).map(_.asTypeOf(gen))
+  val rdata0 = sram.Q((4*gen.getWidth)-1,0).asTypeOf(Vec(way, UInt((gen.getWidth).W))).map(_.asTypeOf(gen))
+  val rdata1 = sram.Q1((4*gen.getWidth)-1,0).asTypeOf(Vec(way, UInt((gen.getWidth).W))).map(_.asTypeOf(gen))
   io.r(0).resp.data := VecInit(rdata0)
   io.r(1).resp.data := VecInit(rdata1)
   

@@ -26,7 +26,7 @@ always @(posedge CLK) begin
         ram[A] <= (D & bwen) | (ram[A] & ~bwen);
     end
     Q <= cen && !wen ? ram[A] : {4{$random}};
-    Q <= cen && !wen ? ram[A1] : {4{$random}};
+    Q1 <= cen && !wen ? ram[A1] : {4{$random}};
 end
 
 endmodule

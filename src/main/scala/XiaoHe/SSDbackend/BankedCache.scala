@@ -66,8 +66,8 @@ sealed trait BankedHasCacheConst {
   val DCacheSRAMRowBits = XLEN
   val DCacheSets = TotalSize * 1024 / LineSize / Ways
   val nWays = cacheConfig.ways
-  val DCacheSetOffset = log2Up(LineSize) + log2Up(cacheConfig.DCacheBanks)
-  val DCacheBankOffset = log2Up(XLEN)
+  val DCacheSetOffset = log2Up(XLEN)
+  val DCacheBankOffset = log2Up(LineBeats)
   val DCacheAboveIndexOffset = DCacheSetOffset + log2Up(DCacheSets)
   val DCacheSRAMRowBytes = DCacheSRAMRowBits/8
   val DCacheBanksBits = log2Up(DCacheBanks)
@@ -188,7 +188,7 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
   val bankconflict = isBankConflict(io.in(0).bits.addr, io.in(1).bits.addr)
   // read meta array and data array
   val readBusValid0 = io.in(0).fire()
-  val readBusValid1 = io.in(1).fire() && (!bankconflict)
+  val readBusValid1 = io.in(1).fire() && !(bankconflict && io.in(0).fire)
   io.metaReadBus(0).apply(
     valid = readBusValid0,
     setIdx = getMetaIdx(io.in(0).bits.addr)
