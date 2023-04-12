@@ -452,7 +452,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
     is(s_idle) {
       afterFirstRead := false.B
 
-      when((miss(0) && !storeHit || mmio(0)) && !io.flush || mmioStorePending) {
+      when(((miss(0) || miss(1)) && !storeHit || mmio(0)) && !io.flush || mmioStorePending) {
         //        state := Mux(meta.dirty, s_memWriteReq, s_memReadReq)
         state := Mux(
           mmioStorePending,
@@ -486,7 +486,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
     is(s_memReadReq) {
       when(io.mem.req.fire()) {
         state := s_memReadResp
-        readBeatCnt.value := addr(0).bankIndex
+        readBeatCnt.value := Mux(miss(0),addr(0).bankIndex, addr(1).bankIndex)
       }
     }
 
@@ -515,7 +515,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
       }
     }
     is(s_wait_resp) {
-      when(io.out(0).fire() ) {
+      when(io.out(0).fire() || io.out(1).fire() ) {
         state := s_idle
       }
     }
@@ -529,7 +529,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   //  dontTouch(dataRefill)
   val dataRefillWriteBus = Wire(CacheDataArrayWriteBus).apply(
     valid = (state === s_memReadResp) && io.mem.resp.fire(),
-    setIdx = Cat(addr(0).index, readBeatCnt.value),
+    setIdx = Cat(Mux(miss(0),addr(0).index,addr(1).index), readBeatCnt.value),
     data = Wire(new BankedDataBundle).apply(dataRefill),
     waymask = waymask(0)
   )
@@ -603,7 +603,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
      val s1NotReady = WireInit(false.B)
      BoringUtils.addSource(cacheStall, "cacheStall")
      BoringUtils.addSink(s1NotReady, "s1NotReady")
-     cacheStall := miss(0) || state =/= s_idle || s1NotReady
+     cacheStall := (miss(0) || miss(1))|| state =/= s_idle || s1NotReady
      BoringUtils.addSource(miss(0), "dcacheMissCycle")
      BoringUtils.addSource((miss(0) & (!RegNext(miss(0)))), "dcacheMissCnt")
      BoringUtils.addSource(s1NotReady & (!RegNext(s1NotReady)), "s1NotReadyCnt")

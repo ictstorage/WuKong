@@ -152,11 +152,11 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
 
 
   io.dmem(0).req.bits <> cacheIn.bits(0)
-  io.dmem(0).req.valid := io.in(0).valid
+  io.dmem(0).req.valid := io.in(0).valid && ~io.memStall
   cacheIn.ready := io.dmem(0).req.ready
 
   io.dmem(1).req.bits <> cacheIn.bits(1)
-  io.dmem(1).req.valid := io.in(1).valid
+  io.dmem(1).req.valid := io.in(1).valid && ~io.memStall
   cacheIn.ready := io.dmem(1).req.ready
   //store buffer
   val storeBuffer = Module(new StoreBuffer)
