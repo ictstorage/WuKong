@@ -525,15 +525,15 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
 
   val dataRefill = MaskData(
     io.mem.resp.bits.rdata,
-    req(0).wdata,
-    Mux(readingFirst, wordMask(0), 0.U(DataBits.W))
+    req(0).wdata, //cus the write always on channel 0!
+    Mux(readingFirst, Mux(miss(0),wordMask(0),wordMask(1)), 0.U(DataBits.W))
   )
   //  dontTouch(dataRefill)
   val dataRefillWriteBus = Wire(CacheDataArrayWriteBus).apply(
     valid = (state === s_memReadResp) && io.mem.resp.fire(),
     setIdx = Cat(Mux(miss(0),addr(0).index,addr(1).index), readBeatCnt.value),
     data = Wire(new BankedDataBundle).apply(dataRefill),
-    waymask = waymask(0)
+    waymask = Mux(miss(0),waymask(0), waymask(1))
   )
 
   dataWriteArb.io.in(0) <> dataHitWriteBus.req
@@ -545,14 +545,10 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
       (state === s_memReadResp) && io.mem.resp.fire() && io.mem.resp.bits
         .isReadLast(),
     data = Wire(new BankedMetaBundle)
-      .apply(valid = true.B, tag = addr(0).tag, dirty = req(0).isWrite()),
-    setIdx = getMetaIdx(req(0).addr),
-    waymask = waymask(0)
+      .apply(valid = true.B, tag = Mux(miss(0),addr(0).tag, addr(1).tag), dirty = Mux(miss(0),req(0).isWrite(), req(1).isWrite())),
+    setIdx = getMetaIdx(Mux(miss(0),req(0).addr,req(1).addr)),
+    waymask = Mux(miss(0),waymask(0), waymask(1))
   )
-
-  val writeDirtyTag =
-    (state === s_memWriteReq) && io.mem.req.bits.addr.asUInt >= "h80022b40".U && io.mem.req.bits.addr.asUInt < "h80022b80".U
-  //  dontTouch(writeDirtyTag)
 
   metaWriteArb.io.in(0) <> metaHitWriteBus.req
   metaWriteArb.io.in(1) <> metaRefillWriteBus.req

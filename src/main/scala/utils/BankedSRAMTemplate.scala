@@ -527,7 +527,7 @@ class BankedMetaSRAMTemplate[T <: Data](gen: T, set: Int, way: Int = 1,
   VecInit(Seq.fill(gen.getWidth)(waymask(1))).asUInt,
   VecInit(Seq.fill(gen.getWidth)(waymask(0))).asUInt
   )
-  sram.D := Cat(wdata)
+  sram.D := wdata
 
   sram.A1 :=  io.r(1).req.bits.setIdx
   // sram.CEN := ~(wen || realRen)
