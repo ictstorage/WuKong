@@ -327,12 +327,12 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
       .apply(tag = meta(0).tag, valid = true.B, dirty = true.B)
   )
 
-
+  //    0           1               2                 3                 4               5             6           7                 8           9
   val s_idle :: s_memReadReq :: s_memReadResp :: s_memWriteReq :: s_memWriteResp :: s_mmio_wait :: s_mmioReq :: s_mmioResp :: s_wait_resp :: s_release :: Nil =
     Enum(10)
   val state = RegInit(s_idle)
   val storeHit = WireInit(false.B)
-  //    BoringUtils.addSink(storeHit, "storeHit")
+  BoringUtils.addSink(storeHit, "storeHit")
 
 
 
@@ -374,7 +374,9 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
 
   // critical word first read
   val raddr =
-    (if (XLEN == 64) Cat(req(0).addr(PAddrBits - 1, 3), 0.U(3.W))
+    (if (XLEN == 64) Mux(miss(0),
+    Cat(req(0).addr(PAddrBits - 1, 3), 0.U(3.W)),
+    Cat(req(1).addr(PAddrBits - 1, 3), 0.U(3.W)))
     else Cat(req(0).addr(PAddrBits - 1, 2), 0.U(2.W)))
   // dirty block addr
   val waddr = Cat(meta(0).tag, addr(0).index, 0.U(OffsetBits.W))
@@ -595,8 +597,8 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   // is totally handled. We use io.isFinish to indicate when the
   // request really ends.
 
-  io.in(0).ready := io.out(0).ready && state === s_idle && !miss(0)
-  io.in(1).ready := io.out(1).ready && state === s_idle && !miss(0)
+  io.in(0).ready := io.out(0).ready && state === s_idle && !(miss.asUInt.orR())
+  io.in(1).ready := io.out(1).ready && state === s_idle && !(miss.asUInt.orR())
 
   // stall when read req in s2 cant be responed or read req in s1 cant be send to s2( s1.in.ready === false.B)
      val cacheStall = WireInit(false.B)

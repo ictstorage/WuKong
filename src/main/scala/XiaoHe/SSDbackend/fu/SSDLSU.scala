@@ -151,15 +151,18 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   val loadCacheIn = Wire(Decoupled(Vec(2, new SimpleBusReqBundle)))
 
 
-  io.dmem(0).req.bits <> cacheIn.bits(0)
-  io.dmem(0).req.valid := io.in(0).valid && ~io.memStall
-  cacheIn.ready := io.dmem(0).req.ready
 
-  io.dmem(1).req.bits <> cacheIn.bits(1)
-  io.dmem(1).req.valid := io.in(1).valid && ~io.memStall
-  cacheIn.ready := io.dmem(1).req.ready
   //store buffer
   val storeBuffer = Module(new StoreBuffer)
+
+
+  io.dmem(0).req.bits <> cacheIn.bits(0)
+  io.dmem(0).req.valid := Mux(storeCacheIn.fire(), storeBuffer.io.out.valid, io.in(0).valid && i0isLoad)
+  cacheIn.ready := io.dmem(0).req.ready && io.dmem(1).req.ready
+
+  io.dmem(1).req.bits <> cacheIn.bits(1)
+  io.dmem(1).req.valid := Mux(storeCacheIn.fire(), false.B, io.in(1).valid && i1isLoad)
+
   //MMIO & OutBuffer
   val outBuffer = Module(new Queue(new StoreBufferEntry, entries = 1))
   val MMIOStorePkt = Wire(Decoupled(new StoreBufferEntry))
@@ -196,7 +199,7 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   loads2valid0 := loadPipe0.io.loadS2Valid
   loads2valid1 := loadPipe1.io.loadS2Valid
   
-  io.memStall := cacheStall && (i0isLoad || i1isLoad || loads2valid0) || bufferFullStall
+  io.memStall := cacheStall && (i0isLoad || i1isLoad || loads2valid0 || loads2valid1) || bufferFullStall
 
   lsuPipeIn(0).valid := i0isStore || i1isStore
   lsuPipeIn(0).bits.isStore := i0isStore || i1isStore
@@ -256,6 +259,7 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
 
   io.out(0) <> loadPipe0.io.out
   io.out(1) <> loadPipe1.io.out
+  dontTouch(io.out)
 
   for(i <- 1 to 1){
     lsuPipeIn(i).bits := lsuPipeOut(i-1).bits
@@ -295,17 +299,18 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   )
 
   storeCacheIn.valid := storeBuffer.io.out.valid
-  loadCacheIn.valid := io.in(0).valid || io.in(1).valid
+  loadCacheIn.valid := (io.in(0).valid && i0isLoad) || (io.in(1).valid && i1isLoad)
   storeBuffer.io.out.ready := storeCacheIn.ready
 
   val cacheInArbiter = Module(new Arbiter(Vec(2, new SimpleBusReqBundle),2))
   val cacheInArbiter1 = Module(new Arbiter(Vec(2, new SimpleBusReqBundle),2))
+  
+  cacheInArbiter1.io.in(0) <> storeCacheIn
+  cacheInArbiter1.io.in(1) <> loadCacheIn
 
   cacheInArbiter.io.in(0) <> loadCacheIn
   cacheInArbiter.io.in(1) <> storeCacheIn
 
-  cacheInArbiter1.io.in(0) <> storeCacheIn
-  cacheInArbiter1.io.in(1) <> loadCacheIn
 
   cacheInArbiter.io.out.ready := cacheIn.ready
   cacheInArbiter1.io.out.ready := cacheIn.ready
