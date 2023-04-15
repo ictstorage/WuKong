@@ -276,8 +276,8 @@ class BankedDataArray(implicit val p: BankedCacheConfig) extends AbstractBankedD
         val addr = Input(UInt())
         val data = Output(Vec(nWays,UInt(DCacheSRAMRowBits.W)))
       }
+      val rw_conflict = Output(Vec(4, Bool()))
     })
-
 
 
 
@@ -304,12 +304,14 @@ class BankedDataArray(implicit val p: BankedCacheConfig) extends AbstractBankedD
       data_bank(w).io.r.req.valid := io.r.en
       data_bank(w).io.r.req.bits.apply(setIdx = io.r.addr)
       io.r.data(w) := data_bank(w).io.r.resp.data(0)
+      io.rw_conflict(w) := data_bank(w).io.r.req.ready
     }
 
     // io.r.data := row_data
 
   }
 
+  val bank_rw_conflict = Wire(Vec(8, Bool()))
 
   val data_banks = List.tabulate(DCacheBanks)(i => Module(new DataSRAMBank(i)))
 
@@ -325,7 +327,7 @@ class BankedDataArray(implicit val p: BankedCacheConfig) extends AbstractBankedD
 
     
 
-    io.read(rport_index).ready := true.B
+    io.read(rport_index).ready := bank_rw_conflict(bank_addrs(rport_index))
 
   })
 
@@ -361,6 +363,7 @@ class BankedDataArray(implicit val p: BankedCacheConfig) extends AbstractBankedD
     data_bank.io.r.addr := bank_set_addr
     bank_result(bank_index) := data_bank.io.r.data.asTypeOf(Vec(nWays,new L1BankedDataReadResult))
 
+    bank_rw_conflict(bank_index) := data_bank.io.rw_conflict.asUInt.andR()
   }
 
   val two_bank_result = VecInit(bank_result(RegNext(bank_addrs(0))),bank_result(RegNext(bank_addrs(1))))
