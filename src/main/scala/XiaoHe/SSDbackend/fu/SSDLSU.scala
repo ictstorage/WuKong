@@ -156,12 +156,6 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   val storeBuffer = Module(new StoreBuffer)
 
 
-  io.dmem(0).req.bits <> cacheIn.bits(0)
-  io.dmem(0).req.valid := Mux(storeCacheIn.fire(), storeBuffer.io.out.valid, io.in(0).valid && i0isLoad)
-  cacheIn.ready := io.dmem(0).req.ready && io.dmem(1).req.ready
-
-  io.dmem(1).req.bits <> cacheIn.bits(1)
-  io.dmem(1).req.valid := Mux(storeCacheIn.fire(), false.B, io.in(1).valid && i1isLoad)
 
   //MMIO & OutBuffer
   val outBuffer = Module(new Queue(new StoreBufferEntry, entries = 1))
@@ -199,7 +193,7 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   loads2valid0 := loadPipe0.io.loadS2Valid
   loads2valid1 := loadPipe1.io.loadS2Valid
   
-  io.memStall := cacheStall && (i0isLoad || i1isLoad || loads2valid0 || loads2valid1) || bufferFullStall
+  io.memStall := (cacheStall || !cacheIn.ready) && (i0isLoad || i1isLoad || loads2valid0 || loads2valid1) || bufferFullStall 
 
   lsuPipeIn(0).valid := i0isStore || i1isStore
   lsuPipeIn(0).bits.isStore := i0isStore || i1isStore
@@ -315,8 +309,9 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   cacheInArbiter.io.out.ready := cacheIn.ready
   cacheInArbiter1.io.out.ready := cacheIn.ready
 
-  cacheIn.bits :=  Mux(storeBuffer.io.isAlmostFull || storeBuffer.io.isFull,cacheInArbiter1.io.out.bits,cacheInArbiter.io.out.bits)
-  cacheIn.valid :=  Mux(storeBuffer.io.isAlmostFull || storeBuffer.io.isFull,cacheInArbiter1.io.out.valid,cacheInArbiter.io.out.valid)
+  val storeEn = storeBuffer.io.isAlmostFull || storeBuffer.io.isFull
+  cacheIn.bits :=  Mux(storeEn, cacheInArbiter1.io.out.bits,cacheInArbiter.io.out.bits)
+  cacheIn.valid :=  Mux(storeEn, cacheInArbiter1.io.out.valid,cacheInArbiter.io.out.valid)
 
 
   io.in(0).ready := lsuPipeIn(0).ready || loadCacheIn.ready
@@ -329,4 +324,16 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   storeBuffer.io.in.bits.data := lsuPipeStage4.io.right.bits.data
   storeBuffer.io.in.bits.mask := lsuPipeStage4.io.right.bits.mask
   storeBuffer.io.in.bits.size := lsuPipeStage4.io.right.bits.size
+
+
+
+  io.dmem(0).req.bits <> cacheIn.bits(0)
+  // io.dmem(0).req.valid := Mux(storeCacheIn.fire(), storeBuffer.io.out.valid, io.in(0).valid && i0isLoad)
+
+  io.dmem(0).req.valid := cacheIn.valid && Mux( storeEn ,true.B,  Mux(!(io.in(0).valid && i0isLoad) && !(io.in(1).valid && i1isLoad) , storeBuffer.io.out.valid, io.in(0).valid && i0isLoad))
+  cacheIn.ready := io.dmem(0).req.ready && io.dmem(1).req.ready
+
+  io.dmem(1).req.bits <> cacheIn.bits(1)
+  io.dmem(1).req.valid := cacheIn.valid && io.in(1).valid && i1isLoad
+
 }

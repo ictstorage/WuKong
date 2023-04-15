@@ -182,7 +182,7 @@ class SSDLoadPipe (implicit val lname:String)extends NutCoreModule with HasStore
 
     val loadS1In = Wire(Flipped(Decoupled(new loadPipeEntry)))
     val loadS2 = Wire(Flipped(Decoupled(new loadPipeEntry)))
-    loadS2.ready := !io.stall
+    loadS2.ready := !io.stall && io.dmem.req.ready
 
     // store hit signal buffer
     val storeHitCtrl = Module(new stallPointConnect(new StoreHitCtrl))

@@ -184,11 +184,15 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
     val metaReadBus = Vec(2, CacheMetaArrayReadBus())
     val dataReadBus = Vec(2, (CacheDataArrayReadBus()))
   }
+  val stateIdel = WireInit(false.B)
+  BoringUtils.addSink(stateIdel, "stateIdel")
   val io = IO(new BankedCacheStage1IO)
   val bankconflict = isBankConflict(io.in(0).bits.addr, io.in(1).bits.addr)
   // read meta array and data array
-  val readBusValid0 = io.in(0).fire()
-  val readBusValid1 = io.in(1).fire() && !(bankconflict && io.in(0).fire)
+  // val readBusValid0 = io.in(0).fire()
+  // val readBusValid1 = io.in(1).fire() && !(bankconflict && io.in(0).fire)
+  val readBusValid0 = io.in(0).valid && !stateIdel
+  val readBusValid1 = io.in(1).valid && !(bankconflict && io.in(0).valid) && !stateIdel
   io.metaReadBus(0).apply(
     valid = readBusValid0,
     setIdx = getMetaIdx(io.in(0).bits.addr)
@@ -206,6 +210,7 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
     setIdx = getDataIdx(io.in(1).bits.addr)
   )
 
+
   // metaArray need to reset before Load
   // s1 is not ready when metaArray is resetting or meta/dataArray is being written
 
@@ -220,6 +225,8 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
   io.out(1).valid := io.in(1).valid && io.metaReadBus(1).req.ready && io.dataReadBus(1).req.ready
   io.in(0).ready := io.out(0).ready && io.metaReadBus(0).req.ready && io.dataReadBus(0).req.ready
   io.in(1).ready := io.out(1).ready && io.metaReadBus(1).req.ready && io.dataReadBus(1).req.ready
+  // io.in(0).ready := io.out(0).ready
+  // io.in(1).ready := io.out(1).ready
   io.out(0).bits.mmio := AddressSpace.isMMIO(io.in(0).bits.addr)
   io.out(1).bits.mmio := AddressSpace.isMMIO(io.in(1).bits.addr)
 }
@@ -601,6 +608,8 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
      val s1NotReady = WireInit(false.B)
      BoringUtils.addSource(cacheStall, "cacheStall")
      BoringUtils.addSink(s1NotReady, "s1NotReady")
+  val stateIdel = (miss(0) || miss(1))|| state =/= s_idle 
+  BoringUtils.addSource(stateIdel, "stateIdel")
      cacheStall := (miss(0) || miss(1))|| state =/= s_idle || s1NotReady
      BoringUtils.addSource(miss(0), "dcacheMissCycle")
      BoringUtils.addSource((miss(0) & (!RegNext(miss(0)))), "dcacheMissCnt")
