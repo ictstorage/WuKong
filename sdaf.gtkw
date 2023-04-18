@@ -1,15 +1,15 @@
 [*]
-[*] GTKWave Analyzer v3.3.104 (w)1999-2020 BSI
-[*] Sat Apr 15 17:19:38 2023
+[*] GTKWave Analyzer v3.3.103 (w)1999-2019 BSI
+[*] Tue Apr 18 05:42:31 2023
 [*]
-[dumpfile] "/home/oslab/xs-env/NutShell/build/2023-04-16@00:25:56.vcd"
-[dumpfile_mtime] "Sat Apr 15 16:25:57 2023"
-[dumpfile_size] 55555138
-[savefile] "/home/oslab/xs-env/NutShell/sdaf.gtkw"
-[timestart] 2165
-[size] 2043 963
-[pos] -119 11
-*-2.422216 2173 3042 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[dumpfile] "/home/jpz/xs-env/NutShell/build/2023-04-17@21:47:24.vcd"
+[dumpfile_mtime] "Tue Apr 18 04:47:25 2023"
+[dumpfile_size] 15763600
+[savefile] "/home/jpz/xs-env/NutShell/sdaf.gtkw"
+[timestart] 850
+[size] 1798 801
+[pos] 296 280
+*-3.533638 871 3042 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.SimTop.
 [treeopen] TOP.SimTop.mem.
@@ -26,9 +26,9 @@
 [treeopen] TOP.SimTop.xiaohe.nutcore.SSDCache.s2.
 [treeopen] TOP.SimTop.xiaohe.nutcore.SSDCache.Xbar.
 [sst_width] 426
-[signals_width] 590
+[signals_width] 480
 [sst_expanded] 1
-[sst_vpaned_height] 363
+[sst_vpaned_height] 453
 @22
 TOP.SimTop.xiaohe.nutcore.SSDbackend.pipeStage2.io_right_bits_pc[38:0]
 TOP.SimTop.xiaohe.nutcore.SSDbackend.pipeStage3.io_right_bits_pc[38:0]
@@ -36,7 +36,7 @@ TOP.SimTop.xiaohe.nutcore.SSDbackend.pipeStage3.io_right_bits_pc[38:0]
 -
 @28
 TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.i0isLoad
-@22
+@23
 TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.loadPipe0.reqAddr[63:0]
 @28
 TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.i1isLoad
@@ -50,35 +50,25 @@ TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.storeReqAddr[63:0]
 @200
 -
 -
+@28
+TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.io_out_0_valid
 @22
-TOP.SimTop.xiaohe.nutcore.SSDCache.s2.state[3:0]
+TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.io_out_0_bits[63:0]
 @28
-TOP.SimTop.xiaohe.nutcore.SSDCache.s2.miss__0
-TOP.SimTop.xiaohe.nutcore.SSDCache.s2.miss__1
-@200
--
-@28
-TOP.SimTop.xiaohe.nutcore.SSDCache.s1.io_out_0_valid
-TOP.SimTop.xiaohe.nutcore.SSDCache.s1.io_out_0_ready
+TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.io_out_1_valid
 @22
-TOP.SimTop.xiaohe.nutcore.SSDCache.s1.io_out_0_bits_req_addr[31:0]
-TOP.SimTop.xiaohe.nutcore.SSDCache.s1.io_out_1_bits_req_addr[31:0]
-@28
-TOP.SimTop.xiaohe.nutcore.SSDCache.s1.io_out_0_ready
-TOP.SimTop.xiaohe.nutcore.SSDCache.s1.io_out_1_ready
-@200
--
-@28
-TOP.SimTop.xiaohe.nutcore.SSDCache.s2.io_mem_req_valid
-@22
-TOP.SimTop.xiaohe.nutcore.SSDCache.s2.io_mem_req_bits_cmd[3:0]
-TOP.SimTop.xiaohe.nutcore.SSDCache.s2.io_mem_req_bits_addr[31:0]
+TOP.SimTop.xiaohe.nutcore.SSDbackend.LSU.io_out_1_bits[63:0]
 @200
 -
 @28
 TOP.SimTop.xiaohe.nutcore.SSDCache.s2.hit_0
 TOP.SimTop.xiaohe.nutcore.SSDCache.s2.hit_1
-TOP.SimTop.xiaohe.nutcore.SSDCache.s1.s1NotReady
+@200
+-
+-
+@28
+TOP.SimTop.xiaohe.nutcore.SSDCache.s1.bankconflict
+TOP.SimTop.xiaohe.nutcore.SSDCache.s1.io_dataReadBus_1_req_valid
 @200
 -
 [pattern_trace] 1
