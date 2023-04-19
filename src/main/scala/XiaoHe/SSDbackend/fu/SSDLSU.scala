@@ -194,7 +194,7 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   loads2valid1 := loadPipe1.io.loadS2Valid
   
   val real_bank_conflict = WireInit(false.B)
-  BoringUtils.addSink(real_bank_conflict,"real_bank_confilict")
+  BoringUtils.addSink(real_bank_conflict,"real_bank_conflict")
 
   io.memStall := (cacheStall || !cacheIn.ready) && (i0isLoad || i1isLoad || loads2valid0 || loads2valid1) || bufferFullStall || real_bank_conflict
 

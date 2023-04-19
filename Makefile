@@ -52,10 +52,10 @@ $(SIM_TOP_V): $(SCALA_FILE) $(TEST_FILE)
 sim-verilog: $(SIM_TOP_V)
 
 emu: sim-verilog
-	$(MAKE) -C ./difftest emu
+	$(MAKE) -C ./difftest emu -j8
 
 emu-run: sim-verilog
-	$(MAKE) -C ./difftest emu-run
+	$(MAKE) -C ./difftest emu-run -j8
 
 init:
 	git submodule update --init
