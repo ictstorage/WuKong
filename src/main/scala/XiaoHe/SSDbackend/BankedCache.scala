@@ -170,6 +170,7 @@ trait HasBankedCacheIO {
 sealed class BankedStage1Out(implicit val cacheConfig: BankedCacheConfig)
   extends BankedCacheBundle {
   val req = new SimpleBusReqBundle(userBits = userBits, idBits = idBits)
+  val bank_conflict = Output(Bool())
   val mmio = Output(Bool())
 }
 // meta read
@@ -182,7 +183,6 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
       ))
     )
     val out = Vec(2, Decoupled(new BankedStage1Out))
-    val real_bank_conflict = Output(Bool())
     val release_later = Input(Bool())
     val metaReadBus = Vec(2, CacheMetaArrayReadBus())
     val dataReadBus = Vec(2, (CacheDataArrayReadBus()))
@@ -201,10 +201,8 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
 
   val release_later = WireInit(false.B)
   release_later := io.release_later
-  io.real_bank_conflict := same_bank && req_valid0 && req_valid1 
 
-
-
+  val real_bank_conflict = same_bank && req_valid0 && req_valid1
 
   // read meta array and data array
   // val readBusValid0 = io.in(0).fire()
@@ -215,7 +213,7 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
   BoringUtils.addSink(process_channel1,"process_channel1")
 
   val readBusValid0 = req_valid0 && (!stateIdel ) && !process_channel1 && !release_later
-  val readBusValid1 = req_valid1 && (!io.real_bank_conflict || io.release_later)  && (!stateIdel || io.release_later)
+  val readBusValid1 = req_valid1 && (!real_bank_conflict || io.release_later)  && (!stateIdel || io.release_later)
   io.metaReadBus(0).apply(
     valid = readBusValid0,
     setIdx = getMetaIdx(io.in(0).bits.addr)
@@ -242,16 +240,22 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
       !io.dataReadBus(0).req.ready || !io.dataReadBus(1).req.ready) && (io.in(0).valid && io.in(1).valid)
   BoringUtils.addSource(s1NotReady, "s1NotReady")
 
+  io.out(0).bits.bank_conflict := same_bank && req_valid0 && req_valid1 
+  io.out(1).bits.bank_conflict := same_bank && req_valid0 && req_valid1 
+
+
   io.out(0).bits.req := io.in(0).bits
   io.out(1).bits.req := io.in(1).bits
-  io.out(0).valid := io.in(0).valid && io.metaReadBus(0).req.ready && io.dataReadBus(0).req.ready && !io.release_later && !release_later
-  io.out(1).valid := io.in(1).valid && io.metaReadBus(1).req.ready && io.dataReadBus(1).req.ready && (!io.real_bank_conflict || io.release_later) 
+  io.out(0).valid := io.in(0).valid && io.metaReadBus(0).req.ready && io.dataReadBus(0).req.ready && !io.release_later 
+  io.out(1).valid := io.in(1).valid && io.metaReadBus(1).req.ready && io.dataReadBus(1).req.ready && (!real_bank_conflict || io.release_later) 
   io.in(0).ready := io.out(0).ready && io.metaReadBus(0).req.ready && io.dataReadBus(0).req.ready
   io.in(1).ready := io.out(1).ready && io.metaReadBus(1).req.ready && io.dataReadBus(1).req.ready
   // io.in(0).ready := io.out(0).ready
   // io.in(1).ready := io.out(1).ready
   io.out(0).bits.mmio := AddressSpace.isMMIO(io.in(0).bits.addr)
   io.out(1).bits.mmio := AddressSpace.isMMIO(io.in(1).bits.addr)
+
+      BoringUtils.addSource(same_bank && req_valid0 && req_valid1 && !io.release_later,"real_bank_conflict")
 }
 
 // check
@@ -259,7 +263,6 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   extends BankedCacheModule {
   class BankedCacheStage2IO extends Bundle {
     val in = Flipped(Vec(2, Decoupled(new BankedStage1Out)))
-    val real_bank_confilict = Input(Bool())
     val out = Vec(2, Decoupled(
       new SimpleBusRespBundle(userBits = userBits, idBits = idBits)
     ))
@@ -408,7 +411,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
       }
     }
   }
-
+  val bank_conflict = io.in(0).bits.bank_conflict
         //double miss logic
   val both_miss = miss(0) && miss(1)
   val later_miss_bank = addr(1).bankIndex
@@ -536,7 +539,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
     is(s_memReadReq) {
       when(io.mem.req.fire()) {
         state := s_memReadResp
-        readBeatCnt.value := Mux(miss(0),addr(0).bankIndex, addr(1).bankIndex)
+        readBeatCnt.value := Mux(both_miss,Mux(both_miss_refill_at_channel1, addr(1).bankIndex, addr(0).bankIndex),Mux(miss(0),addr(0).bankIndex, addr(1).bankIndex))
       }
     }
 
@@ -567,7 +570,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
     is(s_wait_resp) {
       when(io.out(0).fire() || io.out(1).fire() ) {
         state := s_idle
-      }.elsewhen(io.real_bank_confilict){
+      }.elsewhen(bank_conflict){
         state := s_idle
       }.elsewhen(both_miss){
         state := s_idle
@@ -616,13 +619,13 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   io.out(0).valid := io.in(0).valid && Mux(
     hit(0) || storeHit,
     Mux(process_channel0,false.B,Mux(process_channel1, io.out(1).valid, true.B)),
-    Mux(io.real_bank_confilict && (state === s_wait_resp) , io.out(1).valid , Mux(both_miss,io.out(1).valid,state === s_wait_resp))
+    Mux(bank_conflict && (state === s_wait_resp) , io.out(1).valid , Mux(both_miss,io.out(1).valid,state === s_wait_resp))
   )
 
   io.out(1).valid := io.in(1).valid && Mux(
     hit(1),  //
     true.B,
-    Mux(io.real_bank_confilict,false.B, Mux(both_miss,both_miss_refill_at_channel1 && state === s_wait_resp,state === s_wait_resp))
+    Mux(bank_conflict,false.B, Mux(both_miss,both_miss_refill_at_channel1 && state === s_wait_resp,state === s_wait_resp))
   )
 
 
@@ -639,9 +642,9 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   val double_miss_read_buffer = RegEnable(inRdataRegDemand, both_miss && state === s_wait_resp)
   val release_later = WireInit(false.B)
   when(miss(0)){
-    release_later := io.real_bank_confilict && state === s_wait_resp
+    release_later := bank_conflict && state === s_wait_resp
   }.otherwise(
-    release_later := io.real_bank_confilict
+    release_later := bank_conflict
   )
   io.release_later := release_later
   io.out(0).bits.rdata := Mux(process_channel1,conflict_read_buffer,Mux(hit(0), dataRead(0), Mux(both_miss,double_miss_read_buffer,inRdataRegDemand)))
@@ -912,23 +915,11 @@ class SSDCache(implicit val cacheConfig: BankedCacheConfig)
 
     PipelineConnect(s1.io.out(0), s2.io.in(0), s2.io.out(0).fire(), io.flush)
     PipelineConnect(s1.io.out(1), s2.io.in(1), s2.io.out(1).fire() || s2.io.release_later, io.flush)
-    // PipelineConnect(s1.io.real_bank_confilict, s2.io.real_bank_confilict, s2.io.out(0).fire(), io.flush)
-    // s2.io.real_bank_confilict := RegEnable(s1.io.real_bank_confilict,)
-    val s2_confilict = RegInit(false.B)
-    when(s1.io.real_bank_conflict && !s2.io.release_later){
-      s2_confilict := true.B
-    }.elsewhen(s2.io.release_later){
-      s2_confilict := false.B
-    }.otherwise{
-       s2_confilict := false.B
-    }
-    s2.io.real_bank_confilict:= s2_confilict
-    s1.io.release_later := s2.io.release_later
-    BoringUtils.addSource(s1.io.real_bank_conflict && !s2.io.release_later,"real_bank_conflict")
 
+    s1.io.release_later := s2.io.release_later
 
     val process_channel0 = RegInit(false.B)
-    when(s1.io.real_bank_conflict && !s2.io.release_later){
+    when(s1.io.out(0).bits.bank_conflict && !s2.io.release_later && s1.io.metaReadBus(0).req.ready && s1.io.dataReadBus(0).req.ready){
       process_channel0 := true.B
     }.elsewhen(s2.io.release_later){
       process_channel0 := false.B
