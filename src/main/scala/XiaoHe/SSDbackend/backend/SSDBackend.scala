@@ -820,9 +820,7 @@ class SSDbackend extends NutCoreModule with hasBypassConst {
     (pipeOut(9).bits.instr === 0x7b.U) &&  pipeOut(9).fire() && !pipeInvalid(11)){
     printf("%c",a0.asUInt)
   }
-//  when(RegNext((pipeOut(0).bits.instr === 0x7b.U) || (pipeOut(1).bits.instr === 0x7b.U))) {
-//    printf("y")
-//  }
+
 
   //  SSDCorePerfCntList.map { case (name, (addr, boringId)) =>
   //    BoringUtils.addSink(perfCntCond(addr), boringId)}
@@ -840,6 +838,10 @@ class SSDbackend extends NutCoreModule with hasBypassConst {
   /* ----- Difftest ----- */
   val cycle_cnt = RegInit(0.U(64.W))
   val instr_cnt = RegInit(0.U(64.W))
+
+   when(RegNext((pipeOut(8).bits.csrInst) || (pipeOut(9).bits.csrInst ))) {
+   printf("%d\n",cycle_cnt)
+ }
 
   cycle_cnt := cycle_cnt + 1.U
   instr_cnt := instr_cnt + RegNext(pipeOut(8).fire() && !pipeInvalid(10)).asUInt + RegNext(pipeOut(9).fire() && !pipeInvalid(11)).asUInt
