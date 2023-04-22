@@ -117,6 +117,9 @@ class SSDLSU extends  NutCoreModule with HasStoreBufferConst{
   val i1isLoad  = valid(1) && LSUOpType.isLoad(func(1))
   val i1isStore = valid(1) && LSUOpType.isStore(func(1))
 
+  val bothLoad = i0isLoad && i1isLoad
+  dontTouch(bothLoad)
+
   val wdata = Mux(i0isStore,src2(0),src2(1))
   val size = Mux(i0isStore,func(0)(1,0),func(1)(1,0))
   val storeOffset = Mux(i0isStore, offset(0),offset(1))

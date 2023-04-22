@@ -405,14 +405,18 @@ class DecodeIO2BypassPkt extends Module {
     i1Dependi0 && !noneBlockCase ||
     i1SecondaryBlock ||
     mduNotReady0  ||
-    io.issueStall(0) ||
-    i1decodePkt.alu && ( i1rs1MatchE3 && i1rs1Class.subalu || i1rs2MatchE3 && i1rs2Class.subalu)
+    io.issueStall(0) || i1decodePkt.alu && ( i1rs1MatchE3 && i1rs1Class.subalu || i1rs2MatchE3 && i1rs2Class.subalu)
 
   BoringUtils.addSource(i1LoadBlock, "i1LoadBlock")
   BoringUtils.addSource(i1MulBlock, "i1MulBlock")
   BoringUtils.addSource(i1Dependi0 && !noneBlockCase, "i1Dependi0_noneBlockCase")
   BoringUtils.addSource(i1LoadBlock, "i1SecondaryBlock")
 
+  BoringUtils.addSource(i0decodePkt.load && i1decodePkt.load && io.issueStall(1) && i1LoadBlock, "test1")
+  BoringUtils.addSource(i0decodePkt.load && i1decodePkt.load && io.issueStall(1) && (i1Dependi0 && !noneBlockCase), "test2")
+  BoringUtils.addSource(i0decodePkt.load && i1decodePkt.load && io.issueStall(1) && i1SecondaryBlock, "test3")
+  BoringUtils.addSource(i0decodePkt.load && i1decodePkt.load && io.issueStall(1) && io.issueStall(0), "test4")
+  BoringUtils.addSource(i0decodePkt.load && i1decodePkt.load && io.issueStall(1) , "test0")
 
   val cond = i1Dependi0 && !noneBlockCase
   BoringUtils.addSource(cond && i1decodePkt.load && i0decodePkt.alu && !i0Subalu, "i1LoadDependi0ALu")
@@ -428,7 +432,7 @@ class DecodeIO2BypassPkt extends Module {
 
   BoringUtils.addSource(mduNotReady0, "mduNotReady0")
   BoringUtils.addSource(i1Load2Block, "i0i1LSBlock")
-  BoringUtils.addSource(i0decodePkt.load && i1decodePkt.load && i1Hiti0Rs1, "i0i1LoadBlockLoadtouse")
+  BoringUtils.addSource(i0decodePkt.load && i1decodePkt.load && (!io.issueStall(1)), "i0i1LoadBlockLoadtouse")
   BoringUtils.addSource(i0decodePkt.store && i1decodePkt.store, "i0i1StoreBlock")
   BoringUtils.addSource((i0decodePkt.load && i1decodePkt.store) || (i0decodePkt.store && i1decodePkt.load), "i0i1AlternaingBlock")
   

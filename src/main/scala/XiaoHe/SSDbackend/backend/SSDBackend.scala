@@ -207,10 +207,10 @@ class SSDbackend extends NutCoreModule with hasBypassConst {
   }
   val fourAluSfbWrong = VecInit((0 until 4) map {i => ALUList(i).io.sfbPredictwrong})
 
-  BoringUtils.addSource(fourAluSfbWrong(0),"alu0sfbw")
-  BoringUtils.addSource(fourAluSfbWrong(1),"alu1sfbw")
-  BoringUtils.addSource(fourAluSfbWrong(2),"alu2sfbw")
-  BoringUtils.addSource(fourAluSfbWrong(3),"alu3sfbw")
+  // BoringUtils.addSource(fourAluSfbWrong(0),"alu0sfbw")
+  // BoringUtils.addSource(fourAluSfbWrong(1),"alu1sfbw")
+  // BoringUtils.addSource(fourAluSfbWrong(2),"alu2sfbw")
+  // BoringUtils.addSource(fourAluSfbWrong(3),"alu3sfbw")
   (ALURedirectList zip pipeOut2Redirect).foreach{ case(a,b) => a := b.bits.redirect}
   (bpuUpdateReqList zip ALUList).foreach{ case(a,b) => a := b.io.bpuUpdateReq}
   (alu2pmuList zip ALUList).foreach{ case(a,b) => a := b.io.alu2pmu}
@@ -291,7 +291,7 @@ class SSDbackend extends NutCoreModule with hasBypassConst {
   LSU.io.in(1).bits.func  := pipeRegStage3.right.bits.fuOpType
   //MDU
   val MDU = Module(new SSDMDU)
-  MDU.io.out.ready := true.B
+  MDU.io.out.ready := true.B && !memStall
   val i0MDUValid = BypassPktValid(0) && (BypassPkt(0).decodePkt.muldiv)
   val i1MDUValid = BypassPktValid(1) && (BypassPkt(1).decodePkt.muldiv)
   val MDUValid = i0MDUValid || i1MDUValid

@@ -258,7 +258,7 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
   io.out(0).bits.mmio := AddressSpace.isMMIO(io.in(0).bits.addr)
   io.out(1).bits.mmio := AddressSpace.isMMIO(io.in(1).bits.addr)
 
-      BoringUtils.addSource(same_bank && req_valid0 && req_valid1 && !io.release_later,"real_bank_conflict")
+  BoringUtils.addSource(same_bank && req_valid0 && req_valid1 && !io.release_later,"real_bank_conflict")
 }
 
 // check
@@ -419,7 +419,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   val both_miss = miss(0) && miss(1)
   val later_miss_bank = addr(1).bankIndex
   val both_miss_refill_at_channel1 = RegInit(false.B)
-  when(both_miss && state === s_wait_resp){
+  when(both_miss && state === s_wait_resp && !both_miss_refill_at_channel1){
     both_miss_refill_at_channel1 := true.B
   }.elsewhen(both_miss_refill_at_channel1 && state === s_wait_resp){
     both_miss_refill_at_channel1 := false.B
@@ -431,8 +431,13 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
     Cat(req(1).addr(PAddrBits - 1, 3), 0.U(3.W))))
 
   // dirty block addr
-  val waddr = Mux(miss(0),Cat(meta(0).tag, addr(0).index, 0.U(OffsetBits.W)),
-  Cat(meta(1).tag, addr(1).index, 0.U(OffsetBits.W)))
+  val waddr = Mux(both_miss,
+    Mux(both_miss_refill_at_channel1,
+      Cat(meta(1).tag, addr(1).index, 0.U(OffsetBits.W)),
+      Cat(meta(0).tag, addr(0).index, 0.U(OffsetBits.W))),
+    Mux(miss(0),
+      Cat(meta(0).tag, addr(0).index, 0.U(OffsetBits.W)),
+      Cat(meta(1).tag, addr(1).index, 0.U(OffsetBits.W))))
   val cmd = Mux(
     state === s_memReadReq,
     SimpleBusCmd.readBurst,
@@ -517,7 +522,7 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
           Mux(
             mmio(0),
             s_mmioReq,
-            Mux(meta(0).dirty || meta(1).dirty, s_memWriteReq, s_memReadReq)
+            Mux(miss(0) && meta(0).dirty || meta(1).dirty && miss(1), s_memWriteReq, s_memReadReq)
           )
         )
       }
@@ -587,14 +592,14 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
   val dataRefill = MaskData(
     io.mem.resp.bits.rdata,
     req(0).wdata, //cus the write always on channel 0!
-    Mux(readingFirst, Mux(miss(0),wordMask(0),wordMask(1)), 0.U(DataBits.W))
+    Mux(readingFirst, Mux(both_miss,Mux(both_miss_refill_at_channel1,wordMask(1), wordMask(0)),Mux(miss(0),wordMask(0),wordMask(1))), 0.U(DataBits.W))
   )
   //  dontTouch(dataRefill)
   val dataRefillWriteBus = Wire(CacheDataArrayWriteBus).apply(
     valid = (state === s_memReadResp) && io.mem.resp.fire(),
-    setIdx = Cat(Mux(miss(0),addr(0).index,addr(1).index), readBeatCnt.value),
+    setIdx = Cat(Mux(both_miss,Mux(both_miss_refill_at_channel1,addr(1).index,addr(0).index),Mux(miss(0),addr(0).index,addr(1).index)), readBeatCnt.value),
     data = Wire(new BankedDataBundle).apply(dataRefill),
-    waymask = Mux(miss(0),waymask(0), waymask(1))
+    waymask = Mux(both_miss,Mux(both_miss_refill_at_channel1,waymask(1), waymask(0)),Mux(miss(0),waymask(0), waymask(1)))
   )
 
   dataWriteArb.io.in(0) <> dataHitWriteBus.req
