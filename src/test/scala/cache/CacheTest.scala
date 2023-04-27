@@ -2,7 +2,7 @@
 * Copyright (c) 2020 Institute of Computing Technology, CAS
 * Copyright (c) 2020 University of Chinese Academy of Sciences
 * 
-* NutShell is licensed under Mulan PSL v2.
+* WuKong is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2. 
 * You may obtain a copy of Mulan PSL v2 at:
 *             http://license.coscl.org.cn/MulanPSL2 
@@ -26,12 +26,12 @@ import chisel3.util.experimental.BoringUtils
 
 // To run the following cache random test, do the following:
 // * uncomment the following class
-// * comment the NutCoreSimTop class in nutcore/src/test/scala/top/NutCoreSim.scala
-// * define the macro CACHE_TEST in nutcore/src/test/csrc/emu.h:141
-// * run 'make cache' under nutcore/
+// * comment the CoreSimTop class in core/src/test/scala/top/CoreSim.scala
+// * define the macro CACHE_TEST in core/src/test/csrc/emu.h:141
+// * run 'make cache' under core/
 
 /*
-class NutCoreSimTop extends Module {
+class CoreSimTop extends Module {
   val io = IO(new Bundle{
     val difftest = new DiffTestIO
   })
@@ -159,7 +159,7 @@ class NutCoreSimTop extends Module {
       GTimer(), cohIn.resp.bits.rdata, cohAddr)
   }
 
-  // only use to keep consistent with NutCoreSimTop
+  // only use to keep consistent with CoreSimTop
   io.difftest := DontCare
   dontTouch(io.difftest)
 }

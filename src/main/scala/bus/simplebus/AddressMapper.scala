@@ -2,7 +2,7 @@
 * Copyright (c) 2020 Institute of Computing Technology, CAS
 * Copyright (c) 2020 University of Chinese Academy of Sciences
 * 
-* NutShell is licensed under Mulan PSL v2.
+* WuKong is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2. 
 * You may obtain a copy of Mulan PSL v2 at:
 *             http://license.coscl.org.cn/MulanPSL2 
@@ -18,10 +18,10 @@ package bus.simplebus
 
 import chisel3._
 import chisel3.util._
-import XiaoHe.HasNutCoreParameter
+import WuKong.HasCoreParameter
 import utils._
 
-class SimpleBusAddressMapper(map: (Int, Long)) extends Module with HasNutCoreParameter {
+class SimpleBusAddressMapper(map: (Int, Long)) extends Module with HasCoreParameter {
   val io = IO(new Bundle {
     val in = Flipped(new SimpleBusUC)
     val out = new SimpleBusUC

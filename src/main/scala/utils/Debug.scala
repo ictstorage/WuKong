@@ -2,7 +2,7 @@
 * Copyright (c) 2020 Institute of Computing Technology, CAS
 * Copyright (c) 2020 University of Chinese Academy of Sciences
 * 
-* NutShell is licensed under Mulan PSL v2.
+* WuKong is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2. 
 * You may obtain a copy of Mulan PSL v2 at:
 *             http://license.coscl.org.cn/MulanPSL2 
@@ -15,12 +15,11 @@
 ***************************************************************************************/
 
 package utils
-
-import XiaoHe.NutCoreConfig
 import chisel3._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
 import utils.LogLevel.LogLevel
+import top.WuKongConfig
 
 object LogLevel extends Enumeration {
   type LogLevel = Value
@@ -51,7 +50,7 @@ object LogUtil {
            (prefix: Boolean, cond: Bool, pable: Printable)
            (implicit name: String): Any = {
     val commonInfo = p"[${GTimer()}] $name: "
-    when (cond && displayLog && NutCoreConfig().EnableDebug.B) {
+    when (cond && displayLog && WuKongConfig().EnableDebug.B) {
       if(prefix) printf(commonInfo)
       printf(pable)
     }
@@ -73,9 +72,9 @@ sealed abstract class LogHelper(val logLevel: LogLevel) {
   def apply(prefix: Boolean, cond: Bool, pable: Printable)(implicit name: String): Any =
     LogUtil(logLevel)(prefix, cond, pable)
 
-  // NOOP/NutShell style debug
-  def apply(flag: Boolean = NutCoreConfig().EnableDebug, cond: Bool = true.B)(body: => Unit): Any = {
-    if(NutCoreConfig().EnhancedLog){
+  // NOOP/WuKong style debug
+  def apply(flag: Boolean = WuKongConfig().EnableDebug, cond: Bool = true.B)(body: => Unit): Any = {
+    if(WuKongConfig().EnhancedLog){
       if(flag) { when (cond && LogUtil.displayLog) { body } }
     } else {
       if(flag) { when (cond) { body } }
@@ -91,3 +90,25 @@ object Error extends LogHelper(LogLevel.ERROR)
 object ShowType {
   def apply[T: Manifest](t: T) = println(manifest[T])
 }
+import _root_.utils.LogUtil
+import top._
+object myDebug{
+
+  def apply(fmt: String):Any ={
+    printf(fmt)
+  }
+  def apply(cond: Bool,fmt: String, data: Bits*): Any =
+    apply(cond,Printable.pack(fmt,data:_*))
+
+  //UInt
+  def apply(cond: Bool, pable: Printable): Any = {
+      if (WuKongConfig().EnableDebug) {
+        when(cond) {
+          printf(pable)
+        }
+      }
+    }
+
+
+}
+

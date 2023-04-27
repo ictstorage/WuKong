@@ -25,13 +25,13 @@ In addition, the processor has three other main functional units, the branch pre
 
 # Compile chisel code and run testbench
 ## build environment
-* First build the Xiangshan xs-env environment, and use this warehouse instead of NutShell
+* First build the Xiangshan xs-env environment, and use this warehouse instead of WuKong
 * source setup.csh
 ## Generate support difftest version code and test the program
 * source test.csh
 ## Generate code that supports tape-out version
 * Set to SoCTestSettings in Settings.scala
-* Close EnableDifftest in SSDcore.scala
+* Close EnableDifftest in core.scala
 * mill chiselModule.runMain top.ysyx BOARD=soctest
 * Configure the SOC environment by yourself and copy the rtl slightly modified to the vsrc directory to test the tape-out program
 # Notice

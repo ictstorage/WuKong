@@ -2,7 +2,7 @@
 * Copyright (c) 2020 Institute of Computing Technology, CAS
 * Copyright (c) 2020 University of Chinese Academy of Sciences
 * 
-* NutShell is licensed under Mulan PSL v2.
+* WuKong is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2. 
 * You may obtain a copy of Mulan PSL v2 at:
 *             http://license.coscl.org.cn/MulanPSL2 
@@ -16,13 +16,13 @@
 
 package bus.simplebus
 
-import XiaoHe.HasNutCoreParameter
+import WuKong.HasCoreParameter
 import chisel3._
 import chisel3.util._
 import chisel3.util.experimental.loadMemoryFromFile
 
 class DistributedMem(memByte: Int, dualPort: Boolean, delayCycles: Int = 0, dataFile: String = "")
-  extends Module with HasNutCoreParameter {
+  extends Module with HasCoreParameter {
   val io = IO(new Bundle {
     val rw = Flipped(new SimpleBusUC)
     val ro = Flipped(new SimpleBusUC)

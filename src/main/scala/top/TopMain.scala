@@ -2,7 +2,7 @@
  * Copyright (c) 2020 Institute of Computing Technology, CAS
  * Copyright (c) 2020 University of Chinese Academy of Sciences
  *
- * NutShell is licensed under Mulan PSL v2.
+ * WuKong is licensed under Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *             http://license.coscl.org.cn/MulanPSL2
@@ -16,21 +16,20 @@
 
 package top
 
-import XiaoHe.NutCoreConfig
+
 import bus.axi4.ysyxAXI4IO
-import system.XiaoHe
-import _root_.XiaoHe.SSDbackend.{BankedCacheConfig, BankedCacheStage1, BankedCacheStage2, SSDCache, SSDCacheConfig}
+import system.WuKong
+import _root_.WuKong.Backend.{BankedCacheConfig, BankedCacheStage1, BankedCacheStage2}
 import device.AXI4VGA
 import sim.SimTop
 import chisel3._
 import chisel3.stage._
-import top.XiaoHeSim.args
+import top.WuKongSim.args
 import top.ysyx.args
 import utils.BankedDataArray
-import XiaoHe.SSDbackend.backend.SSDbackend
-import XiaoHe.NutCore
-import _root_.XiaoHe.SSDbackend.fu.SSDLSU
-import _root_.XiaoHe.SSDbackend.fu.ALU
+import WuKong.Core
+import _root_.WuKong.Backend.fu.ALU
+import WuKong.Backend.fu.LSU
 class riscv_cpu_io extends Bundle {
   val master = new ysyxAXI4IO()
   val slave  = Flipped(new ysyxAXI4IO())
@@ -38,7 +37,7 @@ class riscv_cpu_io extends Bundle {
 }
 class ysyx extends Module {
   val io : riscv_cpu_io = IO(new riscv_cpu_io)
-  val core = Module(new XiaoHe()(NutCoreConfig()))
+  val core = Module(new WuKong()(WuKongConfig()))
   core.io.master := DontCare
   core.io.slave := DontCare
 
@@ -91,12 +90,12 @@ class ysyx extends Module {
 
 class Top extends Module {
   val io = IO(new Bundle{})
-  val nutshell = Module(new XiaoHe()(NutCoreConfig()))
+  val WuKong = Module(new WuKong()(WuKongConfig()))
   val vga = Module(new AXI4VGA)
 
-  nutshell.io := DontCare
+  WuKong.io := DontCare
   vga.io := DontCare
-//  dontTouch(nutshell.io)
+//  dontTouch(WuKong.io)
 //  dontTouch(vga.io)
 }
 
@@ -144,9 +143,9 @@ object TopMain extends App {
 }
 
 object ysyx extends App{
-  lazy val config = NutCoreConfig(FPGAPlatform = false)
+  lazy val config = WuKongConfig(FPGAPlatform = false)
   //  (new ChiselStage).execute(args, Seq(
-  //    ChiselGeneratorAnnotation(() => new NutCore()(config)))
+  //    ChiselGeneratorAnnotation(() => new Core()(config)))
   ////    ChiselGeneratorAnnotation(() => new testModule))
   //  )
   (new chisel3.stage.ChiselStage).execute(args, Seq(
@@ -156,19 +155,19 @@ object ysyx extends App{
   ))
 }
 
-object XiaoHeSim extends App{
-  lazy val config = NutCoreConfig(FPGAPlatform = false)
+object WuKongSim extends App{
+  lazy val config = WuKongConfig(FPGAPlatform = false)
   (new chisel3.stage.ChiselStage).execute(args, Seq(
     chisel3.stage.ChiselGeneratorAnnotation(() =>new SimTop())
   ))
 }
 
 object CacheSim extends App{
-  lazy val config = NutCoreConfig(FPGAPlatform = false)
+  lazy val config = WuKongConfig(FPGAPlatform = false)
   (new chisel3.stage.ChiselStage).execute(args, Seq(
-    // chisel3.stage.ChiselGeneratorAnnotation(() =>new SSDCache()(BankedCacheConfig(ro = true)))
-    chisel3.stage.ChiselGeneratorAnnotation(() =>new SSDLSU())
+    // chisel3.stage.ChiselGeneratorAnnotation(() =>new DCache()(BankedCacheConfig(ro = true)))
+    chisel3.stage.ChiselGeneratorAnnotation(() =>new LSU())
   ))
 }
 
-//implicit cacheConfig: SSDCacheConfig
+//implicit cacheConfig: CacheConfig

@@ -1,5 +1,5 @@
 
-/home/jpz/xs-env/nexus-am/apps/eh1cmark/build/eh1cmark-riscv64-nutshell.elf:     file format elf64-littleriscv
+/home/jpz/xs-env/nexus-am/apps/eh1cmark/build/eh1cmark-riscv64-WuKong.elf:     file format elf64-littleriscv
 
 
 Disassembly of section .text:

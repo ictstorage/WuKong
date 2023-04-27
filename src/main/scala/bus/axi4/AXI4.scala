@@ -6,8 +6,8 @@ import chisel3._
 import chisel3.internal.firrtl.Width
 import chisel3.util._
 import utils._
-import XiaoHe.HasNutCoreParameter
-object AXI4Parameters extends HasNutCoreParameter {
+import WuKong.HasCoreParameter
+object AXI4Parameters extends HasCoreParameter {
   // These are all fixed by the AXI4 standard:
   val lenBits   = 8
   val sizeBits  = 3

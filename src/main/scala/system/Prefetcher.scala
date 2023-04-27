@@ -2,7 +2,7 @@
 * Copyright (c) 2020 Institute of Computing Technology, CAS
 * Copyright (c) 2020 University of Chinese Academy of Sciences
 * 
-* NutShell is licensed under Mulan PSL v2.
+* WuKong is licensed under Mulan PSL v2.
 * You can use this software according to the terms and conditions of the Mulan PSL v2. 
 * You may obtain a copy of Mulan PSL v2 at:
 *             http://license.coscl.org.cn/MulanPSL2 
@@ -16,7 +16,7 @@
 
 package system
 
-import XiaoHe.{AddressSpace, HasNutCoreParameter}
+import WuKong.{AddressSpace, HasCoreParameter}
 import bus.axi4.{AXI4, AXI4Lite}
 import bus.simplebus._
 import utils._
@@ -24,7 +24,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
 
-trait HasPrefetcherParameter extends HasNutCoreParameter {
+trait HasPrefetcherParameter extends HasCoreParameter {
   val supportPrefetch = HasDcache
 }
 
