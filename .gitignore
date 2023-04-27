@@ -357,5 +357,6 @@ tmp.scala
 *.f
 *.json
 *.fir
-metal*
+./.metals/*
+.metals/workspace-symbol.md
 /log/*
