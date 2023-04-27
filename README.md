@@ -28,7 +28,7 @@ In addition, the processor has three other main functional units, the branch pre
 * First build the Xiangshan xs-env environment, and use this warehouse instead of NutShell
 * source setup.csh
 ## Generate support difftest version code and test the program
-* source testall.csh
+* source test.csh
 ## Generate code that supports tape-out version
 * Set to SoCTestSettings in Settings.scala
 * Close EnableDifftest in SSDcore.scala
