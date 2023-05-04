@@ -187,35 +187,34 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
     val dataReadBus = Vec(2, (CacheDataArrayReadBus()))
   }
   val io = IO(new BankedCacheStage1IO)
-  val stateIdel = WireInit(false.B)
-  BoringUtils.addSink(stateIdel, "stateIdel")
+  //stateBusy from stage2,represent state in stage2 is busy and not ready.
+  val stateBusy = WireInit(false.B)
+  BoringUtils.addSink(stateBusy, "stateBusy")
 
   val req_addr0 = io.in(0).bits.addr
   val req_addr1 = io.in(1).bits.addr
   val req_valid0 = io.in(0).valid
   val req_valid1 = io.in(1).valid
   val same_bank = isBankConflict(req_addr0, req_addr1)
-  // val rrdiff_index = same_bank && !isSetConflict(req_addr0 , req_addr1)
-  // val rrsame_index = same_bank && isSetConflict(req_addr0 , req_addr1)
-
+  //when channel0 in stage2 is finish,allow channel0 and channel1 flow.
   val release_later = WireInit(false.B)
   release_later := io.release_later
 
   val real_bank_conflict = same_bank && req_valid0 && req_valid1
 
-  // read meta array and data array
-  // val readBusValid0 = io.in(0).fire()
-  // val readBusValid1 = io.in(1).fire() && !(bankconflict && io.in(0).fire)
+  //2load situation from stage2
   val process_channel0 = WireInit(false.B)
   val process_channel1 = WireInit(false.B)
   BoringUtils.addSink(process_channel0,"process_channel0")
   BoringUtils.addSink(process_channel1,"process_channel1")
 
+  //represent 2load finish
   val process_channel1_finish = WireInit(false.B)
   BoringUtils.addSink(process_channel1_finish,"process_channel1_finish")
 
-  val readBusValid0 = req_valid0 && (!stateIdel ) && (!process_channel1 || process_channel1_finish) && !release_later
-  val readBusValid1 = req_valid1 && (!real_bank_conflict || io.release_later)  && (!stateIdel || io.release_later)
+  //readvalid,when bankconflict,allow channel0 to read cache and channel1 is forbidden.
+  val readBusValid0 = req_valid0 && (!stateBusy ) && (!process_channel1 || process_channel1_finish) && !release_later
+  val readBusValid1 = req_valid1 && (!real_bank_conflict || io.release_later)  && (!stateBusy || io.release_later)
   io.metaReadBus(0).apply(
     valid = readBusValid0,
     setIdx = getMetaIdx(io.in(0).bits.addr)
@@ -248,6 +247,9 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
 
   io.out(0).bits.req := io.in(0).bits
   io.out(1).bits.req := io.in(1).bits
+  //when bank is conflicting,channel0 is allowed to flow down the pipe and channel1 is forbidden.
+  //But when release_later is high, also allow channel0 flow down the pipe.
+  //because the bank_conflict signal is used in stage2.
   io.out(0).valid := io.in(0).valid && io.metaReadBus(0).req.ready && io.dataReadBus(0).req.ready 
   io.out(1).valid := io.in(1).valid && io.metaReadBus(1).req.ready && io.dataReadBus(1).req.ready && (!real_bank_conflict || io.release_later) 
   io.in(0).ready := io.out(0).ready && io.metaReadBus(0).req.ready && io.dataReadBus(0).req.ready
@@ -257,6 +259,7 @@ class BankedCacheStage1(implicit val cacheConfig: BankedCacheConfig)
   io.out(0).bits.mmio := AddressSpace.isMMIO(io.in(0).bits.addr)
   io.out(1).bits.mmio := AddressSpace.isMMIO(io.in(1).bits.addr)
 
+  //when bankcoflict and not relese,stall core.
   BoringUtils.addSource(same_bank && req_valid0 && req_valid1 && !io.release_later,"real_bank_conflict")
 }
 
@@ -647,13 +650,15 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
     Mux(mmio(0), io.mmio.resp.bits.rdata, io.mem.resp.bits.rdata),
     Mux(mmio(0), state === s_mmioResp, later_miss_bank === readBeatCnt.value)
   )
+  //bankconflict channel0 readbuffer,save channel0 read data before channel1 to reading.
   val conflict_read_buffer = RegEnable(io.out(0).bits.rdata,io.release_later)
+  //bothmiss channel0 readbuffer,save channel0 read data before channel1 to reading.
   val double_miss_read_buffer = RegEnable(inRdataRegDemand, both_miss && state === s_wait_resp)
   val release_later = RegInit(false.B)
   when(miss(0) && bank_conflict && state === s_wait_resp && !release_later && !process_channel1){
-    release_later := true.B
+    release_later := true.B   //channel0 miss have been processed.
   }.elsewhen(!miss(0) && bank_conflict && !release_later && !process_channel1)(
-    release_later := true.B
+    release_later := true.B   //channel0 not miss and fetched data,allow channel1 fetch later. 
   ).otherwise{
     release_later := false.B
   }
@@ -687,8 +692,8 @@ sealed class BankedCacheStage2(implicit val cacheConfig: BankedCacheConfig)
      val s1NotReady = WireInit(false.B)
      BoringUtils.addSource(cacheStall, "cacheStall")
      BoringUtils.addSink(s1NotReady, "s1NotReady")
-  val stateIdel = (miss(0) || miss(1))|| state =/= s_idle 
-  BoringUtils.addSource(stateIdel, "stateIdel")
+  val stateBusy = (miss(0) || miss(1))|| state =/= s_idle 
+  BoringUtils.addSource(stateBusy, "stateBusy")
      cacheStall := ((miss(0) || miss(1))|| state =/= s_idle || s1NotReady) && !io.release_later
      BoringUtils.addSource(miss(0), "dcacheMissCycle")
      BoringUtils.addSource((miss(0) & (!RegNext(miss(0)))), "dcacheMissCnt")
